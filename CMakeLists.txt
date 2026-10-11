@@ -16,7 +16,16 @@ FetchContent_Declare(SFML
 )
 
 FetchContent_MakeAvailable(SFML)
-add_executable(NightShift src/main.cpp)
+add_executable(NightShift
+    src/main.cpp
+    src/Application.cpp
+    src/Button.cpp
+    src/MainMenu.cpp
+)
+
+target_include_directories(NightShift PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
 
 target_compile_features(NightShift PRIVATE cxx_std_17)
 
