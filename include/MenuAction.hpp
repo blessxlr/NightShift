@@ -6,5 +6,6 @@ enum class MenuAction
 	NewGame,
 	Continue,
 	ShowControls,
+	ReturnToMenu,
 	Exit
 };

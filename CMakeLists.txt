@@ -21,6 +21,13 @@ add_executable(NightShift
     src/Application.cpp
     src/Button.cpp
     src/MainMenu.cpp
+    src/ControlsScreen.cpp
+    src/MenuBackground.cpp
+    src/MenuMusic.cpp
+    src/TvEffect.cpp
+    src/OfficeScreen.cpp
+	src/OfficeCamera.cpp
+	src/NightIntroScreen.cpp
 )
 
 target_include_directories(NightShift PRIVATE

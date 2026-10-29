@@ -3,8 +3,12 @@
 #include <SFML/Graphics/Color.hpp>
 #include <SFML/Graphics/RenderTarget.hpp>
 #include <SFML/Window/Event.hpp>
+#include <SFML/Window/Mouse.hpp>
+#include <SFML/Graphics/Texture.hpp>
 
-MainMenu::MainMenu(const sf::Font &font)
+#include <algorithm>
+
+MainMenu::MainMenu(const sf::Font& font)
     : title_(font, "Night\nShift", 96u),
       nightLabel_(font, L"Ночь 1", 22u),
       selectionMarker_(font, ">>", 32u),
@@ -31,6 +35,8 @@ MainMenu::MainMenu(const sf::Font &font)
 
 void MainMenu::render(sf::RenderTarget& target) const
 {
+    background_.render(target);
+
     target.draw(title_);
 
     newGameButton_.render(target);
@@ -44,6 +50,14 @@ void MainMenu::render(sf::RenderTarget& target) const
     {
         target.draw(selectionMarker_);
     }
+    
+    tvEffect_.render(target);
+}
+
+void MainMenu::update(sf::Time elapsed)
+{
+    background_.update(elapsed);
+    tvEffect_.update(elapsed);
 }
 
 void MainMenu::updateHover(sf::Vector2f point)
@@ -74,6 +88,31 @@ void MainMenu::updateHover(sf::Vector2f point)
     }
 }
 
+MenuAction MainMenu::actionAt(sf::Vector2f point) const
+{
+	if (newGameButton_.contains(point))
+	{
+		return MenuAction::NewGame;
+	}
+	
+	if (continueButton_.contains(point))
+	{
+		return MenuAction::Continue;
+	}
+	
+	if (controlsButton_.contains(point))
+	{
+		return MenuAction::ShowControls;
+	}
+	
+	if (exitButton_.contains(point))
+	{
+		return MenuAction::Exit;
+	}
+	
+	return MenuAction::None;
+}
+
 MenuAction MainMenu::handleEvent(
     const sf::Event& event,
     const sf::RenderTarget& target
@@ -86,6 +125,21 @@ MenuAction MainMenu::handleEvent(
         updateHover(point);
     }
     else if (
+        const auto* mousePressed =
+            event.getIf<sf::Event::MouseButtonPressed>()
+    )
+    {
+        if (mousePressed->button == sf::Mouse::Button::Left)
+        {
+            const auto point =
+                target.mapPixelToCoords(mousePressed->position);
+
+            updateHover(point);
+
+            return actionAt(point);
+        }
+    }
+    else if (
         event.is<sf::Event::MouseLeft>() ||
         event.is<sf::Event::FocusLost>()
     )
@@ -94,4 +148,9 @@ MenuAction MainMenu::handleEvent(
     }
 
     return MenuAction::None;
+}
+
+void MainMenu::resetHover()
+{
+	isButtonHovered_ = false;
 }
