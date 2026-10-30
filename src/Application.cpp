@@ -14,9 +14,10 @@ Application::Application()
       menuFont_("assets/fonts/menu.ttf"),
       keyboardTexture_("assets/images/keyboard-controls.png"),
       menuMusic_("assets/audio/menu-ambience.mp3"),
+      switchSound_("assets/audio/night-start.wav"),
       mainMenu_(menuFont_),
       controlsScreen_(menuFont_, keyboardTexture_),
-      nightIntroScreen_(menuFont_),
+      nightIntroScreen_(menuFont_, switchSound_),
       officeScreen_(menuFont_)
 {
     window_.setFramerateLimit(60);
@@ -26,6 +27,8 @@ Application::Application()
     );
 
     keyboardTexture_.setSmooth(true);
+    
+    window_.setKeyRepeatEnabled(false);
 }
 
 void Application::run()
@@ -51,6 +54,7 @@ void Application::run()
     }
     
     menuMusic_.stop();
+    switchSound_.stop();
 }
 
 void Application::update(sf::Time elapsed)
@@ -70,7 +74,7 @@ void Application::update(sf::Time elapsed)
 
         if (nightIntroScreen_.isFinished())
         {
-            officeScreen_.resetView();
+            officeScreen_.startNight();
             currentScreen_ = Screen::Office;
         }
     }
@@ -137,10 +141,12 @@ void Application::processEvents()
 		if (event->is<sf::Event::FocusLost>())
 		{
 			menuMusic_.pause();
+			switchSound_.pause();
 		}
 		else if (event->is<sf::Event::FocusGained>())
 		{
 			menuMusic_.resume();
+			switchSound_.resume();
 		}
 
         const auto action = handleScreenEvent(*event);

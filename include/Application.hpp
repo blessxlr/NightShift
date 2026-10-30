@@ -6,6 +6,7 @@
 #include "MenuMusic.hpp"
 #include "OfficeScreen.hpp"
 #include "NightIntroScreen.hpp"
+#include "SwitchSound.hpp"
 
 #include <SFML/Graphics/Font.hpp>
 #include <SFML/Graphics/Texture.hpp>
@@ -41,6 +42,7 @@ private:
     sf::Font menuFont_;
     sf::Texture keyboardTexture_;
     MenuMusic menuMusic_;
+    SwitchSound switchSound_;
 
     MainMenu mainMenu_;
     ControlsScreen controlsScreen_;

@@ -113,10 +113,7 @@ MenuAction MainMenu::actionAt(sf::Vector2f point) const
 	return MenuAction::None;
 }
 
-MenuAction MainMenu::handleEvent(
-    const sf::Event& event,
-    const sf::RenderTarget& target
-)
+MenuAction MainMenu::handleEvent(const sf::Event& event, const sf::RenderTarget& target)
 {
     if (const auto* mouseMoved = event.getIf<sf::Event::MouseMoved>())
     {

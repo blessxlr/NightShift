@@ -3,6 +3,7 @@
 #include <SFML/Graphics/Color.hpp>
 #include <SFML/Graphics/RenderTarget.hpp>
 #include <SFML/System/String.hpp>
+#include "SwitchSound.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -23,8 +24,9 @@ namespace
     }
 }
 
-NightIntroScreen::NightIntroScreen(const sf::Font& font)
-    : newspaperTexture_("assets/images/newspaper-intro.png"),
+NightIntroScreen::NightIntroScreen(const sf::Font& font, SwitchSound& switchSound)
+    : switchSound_(switchSound),
+      newspaperTexture_("assets/images/newspaper-intro.png"),
       newspaper_(newspaperTexture_),
       timeLabel_(font, "12:00 AM", 60u),
       nightLabel_(font, L"Ночь 1", 60u),
@@ -67,12 +69,23 @@ void NightIntroScreen::start(
 
     centerText(nightLabel_, {960.f, 580.f});
 
-    stage_ = showNewspaper
-        ? Stage::Newspaper
-        : Stage::NightTitle;
-
     stageSeconds_ = 0.f;
+
+    enterStage(
+        showNewspaper ? Stage::Newspaper : Stage::NightTitle
+    );
+
     updateFade();
+}
+
+void NightIntroScreen::enterStage(Stage stage)
+{
+    stage_ = stage;
+
+    if (stage_ == Stage::NightTitle)
+    {
+        switchSound_.play();
+    }
 }
 
 void NightIntroScreen::update(sf::Time elapsed)
@@ -89,13 +102,17 @@ void NightIntroScreen::update(sf::Time elapsed)
         stageSeconds_ -= stageDuration();
 
         if (stage_ == Stage::Newspaper)
-        {
-            stage_ = Stage::NightTitle;
-        }
-        else
-        {
-            stage_ = Stage::Finished;
-        }
+		{
+			enterStage(Stage::BlackPause);
+		}
+		else if (stage_ == Stage::BlackPause)
+		{
+			enterStage(Stage::NightTitle);
+		}
+		else
+		{
+			enterStage(Stage::Finished);
+		}
     }
 
     if (!isFinished())
@@ -106,22 +123,24 @@ void NightIntroScreen::update(sf::Time elapsed)
 
 void NightIntroScreen::render(sf::RenderTarget& target) const
 {
-    if (isFinished())
-    {
-        return;
-    }
-
     if (stage_ == Stage::Newspaper)
     {
         target.draw(newspaper_);
+        target.draw(fade_);
     }
-    else
+    else if (stage_ == Stage::NightTitle)
     {
-        target.draw(timeLabel_);
-        target.draw(nightLabel_);
-    }
+        constexpr float textAppearSeconds = 0.1f;
 
-    target.draw(fade_);
+        if (stageSeconds_ >= textAppearSeconds)
+        {
+            target.draw(timeLabel_);
+            target.draw(nightLabel_);
+        }
+
+        target.draw(fade_);
+        renderSwitch(target);
+    }
 }
 
 bool NightIntroScreen::isFinished() const
@@ -135,6 +154,9 @@ float NightIntroScreen::stageDuration() const
     {
         case Stage::Newspaper:
             return 6.f;
+            
+        case Stage::BlackPause:
+			return 0.2f;
 
         case Stage::NightTitle:
             return 3.f;
@@ -151,20 +173,69 @@ void NightIntroScreen::updateFade()
     constexpr float fadeInSeconds = 0.5f;
     constexpr float fadeOutSeconds = 0.7f;
 
-    const float fadeIn = stageSeconds_ / fadeInSeconds;
+    float visibility = 0.f;
 
-    const float fadeOut =
-        (stageDuration() - stageSeconds_) / fadeOutSeconds;
+    if (stage_ == Stage::Newspaper)
+    {
+        const float fadeIn = stageSeconds_ / fadeInSeconds;
 
-    const float visibility = std::clamp(
-        std::min(fadeIn, fadeOut),
-        0.f,
-        1.f
-    );
+        const float fadeOut =
+            (stageDuration() - stageSeconds_) / fadeOutSeconds;
+
+        visibility = std::min(fadeIn, fadeOut);
+    }
+    else if (stage_ == Stage::NightTitle)
+    {
+        visibility =
+            (stageDuration() - stageSeconds_) / fadeOutSeconds;
+    }
+
+    visibility = std::clamp(visibility, 0.f, 1.f);
 
     const auto alpha = static_cast<std::uint8_t>(
         255.f * (1.f - visibility)
     );
 
     fade_.setFillColor(sf::Color(0, 0, 0, alpha));
+}
+
+void NightIntroScreen::renderSwitch(sf::RenderTarget& target) const
+{
+    constexpr float framesPerSecond = 30.f;
+    constexpr unsigned int frameCount = 5u;
+
+    const auto frame = static_cast<unsigned int>(
+        stageSeconds_ * framesPerSecond
+    );
+
+    if (frame >= frameCount)
+    {
+        return;
+    }
+
+    constexpr float layouts[frameCount][4] = {
+        {   0.f, 1080.f,   0.f,   0.f },
+        { 230.f,  420.f, 655.f, 125.f },
+        { 180.f,  125.f, 360.f, 420.f },
+        {   0.f,  180.f, 750.f, 125.f },
+        {-180.f,  180.f, 800.f, 125.f }
+    };
+
+    for (unsigned int index = 0u; index < 2u; ++index)
+    {
+        const float y = layouts[frame][index * 2u];
+        const float height = layouts[frame][index * 2u + 1u];
+
+        if (height <= 0.f)
+        {
+            continue;
+        }
+
+        sf::RectangleShape band({1920.f, height});
+
+        band.setPosition({0.f, y});
+        band.setFillColor(sf::Color::White);
+
+        target.draw(band);
+    }
 }

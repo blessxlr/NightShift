@@ -12,10 +12,12 @@ namespace sf
     class RenderTarget;
 }
 
+class SwitchSound;
+
 class NightIntroScreen
 {
 public:
-    explicit NightIntroScreen(const sf::Font& font);
+    explicit NightIntroScreen(const sf::Font& font, SwitchSound& switchSound);
 
     void start(unsigned int night, bool showNewspaper);
     void update(sf::Time elapsed);
@@ -27,12 +29,17 @@ private:
     enum class Stage
     {
         Newspaper,
+        BlackPause,
         NightTitle,
         Finished
     };
 
+	void enterStage(Stage stage);
+
     float stageDuration() const;
     void updateFade();
+
+	SwitchSound& switchSound_;
 
     sf::Texture newspaperTexture_;
     sf::Sprite newspaper_;
@@ -42,4 +49,6 @@ private:
 
     Stage stage_ = Stage::Finished;
     float stageSeconds_ = 0.f;
+    
+    void renderSwitch(sf::RenderTarget& target) const;
 };

@@ -76,10 +76,7 @@ ControlsScreen::ControlsScreen(const sf::Font& font, const sf::Texture &keyboard
 	keyboardSprite_.setPosition({960.f, 450.f});
 }
 
-MenuAction ControlsScreen::handleEvent(
-    const sf::Event& event,
-    const sf::RenderTarget& target
-)
+MenuAction ControlsScreen::handleEvent(const sf::Event& event,const sf::RenderTarget& target)
 {
     if (const auto* mouseMoved = event.getIf<sf::Event::MouseMoved>())
     {
