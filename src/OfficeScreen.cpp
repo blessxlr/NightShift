@@ -79,15 +79,24 @@ namespace
 
 OfficeScreen::OfficeScreen(const sf::Font& font)
     : backgroundTexture_("assets/images/office-panorama.png"),
+      roomSurface_(sf::Vector2u{backgroundTexture_.getSize().x * 1080u / backgroundTexture_.getSize().y,1080u}),
+	  roomImage_(roomSurface_.getTexture()),
       background_(backgroundTexture_),
+      lighting_(backgroundTexture_),
       doorTexture_("assets/images/door-panel.png"),
       leverTexture_("assets/images/door-lever-up.png"),
 	  leftDoor_(doorTexture_, makeLeftDoorCorners(backgroundTexture_.getSize())),
 	  rightDoor_(doorTexture_, makeRightDoorCorners(backgroundTexture_.getSize())),
+      leftReflection_(doorTexture_, makeLeftDoorCorners(backgroundTexture_.getSize())),
+      rightReflection_(doorTexture_, makeRightDoorCorners(backgroundTexture_.getSize())),
 	  leftLever_(leverTexture_, makeLeftLeverCorners(backgroundTexture_.getSize())),
 	  rightLever_(leverTexture_,makeRightLeverCorners(backgroundTexture_.getSize()),DoorLever::Side::Right),
 	  camera_(static_cast<float>(backgroundTexture_.getSize().x) * 1080.f/ static_cast<float>(backgroundTexture_.getSize().y)),
-      nightLabel_(font, L"Ночь 1", 36u)
+      nightLabel_(font, L"Ночь 1", 36u),
+      monitor_(backgroundTexture_, OfficeMonitor::Corners{sf::Vector2f{1116.f, 389.f},
+        sf::Vector2f{1176.f, 390.f},
+        sf::Vector2f{1176.f, 436.f},
+        sf::Vector2f{1116.f, 435.f}})
 {
     const float scale =
         1080.f / static_cast<float>(backgroundTexture_.getSize().y);
@@ -179,10 +188,25 @@ void OfficeScreen::update(sf::Time elapsed)
     }
 
     camera_.update(elapsed);
-    leftDoor_.update(elapsed);
-    rightDoor_.update(elapsed);
+    const float previousLeft = leftDoor_.closedAmount();
+	const float previousRight = rightDoor_.closedAmount();
+
+	leftDoor_.update(elapsed);
+	rightDoor_.update(elapsed);
+
+	if (leftDoor_.closedAmount() != previousLeft ||
+		rightDoor_.closedAmount() != previousRight)
+	{
+		roomNeedsRedraw_ = true;
+	}
+    leftReflection_.update(leftDoor_.closedAmount());
+    rightReflection_.update(rightDoor_.closedAmount());
+    lighting_.setDoorClosure(leftDoor_.closedAmount(), rightDoor_.closedAmount());
     leftLever_.update(elapsed, leftDoor_.wantsClosed());
     rightLever_.update(elapsed, rightDoor_.wantsClosed());
+    monitor_.update(elapsed);
+    lamp_.update(elapsed);
+    lighting_.setLampBrightness(lamp_.brightness());
 }
 
 void OfficeScreen::render(sf::RenderTarget& target) const
@@ -191,24 +215,61 @@ void OfficeScreen::render(sf::RenderTarget& target) const
 
     target.setView(camera_.getView());
 
-    target.draw(background_);
-    leftDoor_.render(target);
-    rightDoor_.render(target);
-    leftLever_.render(target);
-    rightLever_.render(target);
+    if (lamp_.brightness() >= 1.f)
+    {
+        drawOffice(target);
+    }
+    else
+    {
+        if (roomNeedsRedraw_)
+        {
+            roomSurface_.setView(
+                roomSurface_.getDefaultView()
+            );
+
+            roomSurface_.clear(sf::Color::Black);
+            drawOffice(roomSurface_);
+            roomSurface_.display();
+
+            roomNeedsRedraw_ = false;
+        }
+
+        lighting_.renderRoom(target, roomImage_);
+    }
+
+    monitor_.render(target);
 
     target.setView(previousView);
-
     target.draw(nightLabel_);
 }
 
 void OfficeScreen::startNight()
 {
     hasFocus_ = true;
+    roomNeedsRedraw_ = true;
+    lamp_.reset();
+    lighting_.setLampBrightness(lamp_.brightness());
 
     camera_.reset();
     leftDoor_.reset();
     rightDoor_.reset();
+    leftReflection_.update(0.f);
+    rightReflection_.update(0.f);
     leftLever_.reset();
     rightLever_.reset();
+    lighting_.setDoorClosure(0.f, 0.f);
+}
+
+void OfficeScreen::drawOffice(sf::RenderTarget& target) const
+{
+    lighting_.render(target, background_);
+
+    leftReflection_.render(target);
+    rightReflection_.render(target);
+
+    leftDoor_.render(target);
+    rightDoor_.render(target);
+
+    leftLever_.render(target);
+    rightLever_.render(target);
 }

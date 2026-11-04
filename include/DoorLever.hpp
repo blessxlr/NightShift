@@ -1,5 +1,6 @@
 #pragma once
 
+#include <SFML/Graphics/Shader.hpp>
 #include <SFML/Graphics/VertexArray.hpp>
 #include <SFML/System/Time.hpp>
 #include <SFML/System/Vector2.hpp>
@@ -57,6 +58,7 @@ private:
     Side side_;
     sf::VertexArray shadow_;
     sf::VertexArray mesh_;
+    sf::Shader metalShader_;
     std::vector<Face> faces_;
     std::vector<Face> staticFaces_;
     float position_ = 0.f;

@@ -5,6 +5,7 @@
 #include <SFML/Graphics/RenderTarget.hpp>
 #include <SFML/Graphics/Texture.hpp>
 
+#include <filesystem>
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -25,8 +26,10 @@ DoorLever::DoorLever(const sf::Texture& texture, const Corners& corners, Side si
       corners_(corners),
       side_(side),
       shadow_(sf::PrimitiveType::Triangles, 6u),
-      mesh_(sf::PrimitiveType::Triangles)
+      mesh_(sf::PrimitiveType::Triangles),
+      metalShader_(std::filesystem::path{"assets/shaders/lever-metal.frag"}, sf::Shader::Type::Fragment)
 {
+    metalShader_.setUniform("texture", sf::Shader::CurrentTexture);
     faces_.reserve(256u);
     staticFaces_.reserve(100u);
     buildBase();
@@ -78,6 +81,7 @@ void DoorLever::render(sf::RenderTarget& target) const
     states.texture = &texture_;
 
     target.draw(shadow_, states);
+    states.shader = &metalShader_;
     target.draw(mesh_, states);
 }
 

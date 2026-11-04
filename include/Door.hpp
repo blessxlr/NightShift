@@ -29,6 +29,11 @@ public:
 
     bool isClosed() const;
 
+	float closedAmount() const
+	{
+		return closedAmount_;
+	}
+
 private:
     void updateVertices();
 

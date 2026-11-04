@@ -31,6 +31,10 @@ add_executable(NightShift
 	src/SwitchSound.cpp
 	src/Door.cpp
 	src/DoorLever.cpp
+	src/OfficeLighting.cpp
+	src/DoorReflection.cpp
+	src/OfficeMonitor.cpp
+	src/OfficeLamp.cpp
 )
 
 target_include_directories(NightShift PRIVATE
