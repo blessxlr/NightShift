@@ -7,6 +7,12 @@
 #include "DoorReflection.hpp"
 #include "OfficeMonitor.hpp"
 #include "OfficeLamp.hpp"
+#include "CorridorLight.hpp"
+#include "LightButton.hpp"
+#include "DoorSounds.hpp"
+#include "LightSounds.hpp"
+#include "OfficeFan.hpp"
+#include "FanSound.hpp"
 
 #include <SFML/Graphics/Sprite.hpp>
 #include <SFML/Graphics/Text.hpp>
@@ -35,19 +41,37 @@ private:
     mutable sf::RenderTexture roomSurface_;
     mutable bool roomNeedsRedraw_ = true;
 	sf::Sprite roomImage_;
+	OfficeFan fan_;
+	FanSound fanSound_;
     OfficeLighting lighting_;
     sf::Texture doorTexture_;
     sf::Texture leverTexture_;
     Door leftDoor_;
     Door rightDoor_;
+    DoorSounds doorSounds_;
+    LightSounds lightSounds_;
+    void toggleLeftDoor();
+	void toggleRightDoor();
     DoorReflection leftReflection_;
     DoorReflection rightReflection_;
     DoorLever leftLever_;
     DoorLever rightLever_;
+    LightButton leftLightButton_;
+	LightButton rightLightButton_;
     OfficeMonitor monitor_;
     OfficeCamera camera_;
     sf::Text nightLabel_;
     bool hasFocus_ = true;
     OfficeLamp lamp_;
+    CorridorLight leftLight_;
+	CorridorLight rightLight_;
     void drawOffice(sf::RenderTarget& target) const;
+    
+    void clearLightInput();
+
+	bool leftLightKeyHeld_ = false;
+	bool rightLightKeyHeld_ = false;
+
+	bool leftLightMouseHeld_ = false;
+	bool rightLightMouseHeld_ = false;
 };

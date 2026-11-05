@@ -11,7 +11,8 @@
 OfficeLighting::OfficeLighting(const sf::Texture& originalTexture)
     : warmTexture_("assets/images/office-warm-base.png"),
 	shader_(std::filesystem::path{"assets/shaders/office-lighting.frag"}, sf::Shader::Type::Fragment),
-	lampShader_(std::filesystem::path{"assets/shaders/office-lighting.frag"}, sf::Shader::Type::Fragment)
+	lampShader_(std::filesystem::path{"assets/shaders/office-lighting.frag"}, sf::Shader::Type::Fragment),
+	corridorTexture_("assets/images/office-corridors-lit.png")
 {
     if (warmTexture_.getSize() != originalTexture.getSize())
     {
@@ -28,6 +29,12 @@ OfficeLighting::OfficeLighting(const sf::Texture& originalTexture)
     });
 
 	shader_.setUniform("lampPass", false);
+	
+	corridorTexture_.setSmooth(true);
+
+	shader_.setUniform("corridorTexture", corridorTexture_);
+
+setCorridorLights(0.f, 0.f);
 
 	lampShader_.setUniform("lampPass", true);
 	lampShader_.setUniform("originalTexture", sf::Shader::CurrentTexture);
@@ -73,4 +80,17 @@ void OfficeLighting::renderRoom(sf::RenderTarget& target,const sf::Sprite& room)
     states.shader = &lampShader_;
 
     target.draw(room, states);
+}
+
+void OfficeLighting::setCorridorLights(float left, float right)
+{
+    shader_.setUniform(
+        "leftIntensity",
+        std::clamp(left, 0.f, 1.f)
+    );
+
+    shader_.setUniform(
+        "rightIntensity",
+        std::clamp(right, 0.f, 1.f)
+    );
 }

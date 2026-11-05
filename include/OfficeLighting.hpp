@@ -21,8 +21,11 @@ public:
 
 	void renderRoom(sf::RenderTarget& target,const sf::Sprite& room) const;
 
+	void setCorridorLights(float left, float right);
+
 private:
     sf::Texture warmTexture_;
     sf::Shader shader_;
     sf::Shader lampShader_;
+    sf::Texture corridorTexture_;
 };

@@ -7,6 +7,10 @@ uniform float leftClosed;
 uniform float rightClosed;
 uniform bool lampPass;
 uniform float lampBrightness;
+uniform sampler2D corridorTexture;
+
+uniform float leftIntensity;
+uniform float rightIntensity;
 
 float doorwayMask(vec2 p)
 {
@@ -33,6 +37,26 @@ float shadowMask(vec2 p, float closed)
                         smoothstep(210.0, 260.0, p.y);
     float floorRegion = smoothstep(0.0, 8.0, depth);
     return doorwayMask(p) * mix(frameShadow, floorShadow, floorRegion);
+}
+
+float corridorMask(vec2 p, float shadow)
+{
+    float across = (p.x - 222.0) / 194.0;
+
+    float top = mix(176.0, 194.0, across);
+    float bottom = mix(563.0, 548.0, across);
+
+    float opening =
+        smoothstep(222.0, 226.0, p.x)
+        * (1.0 - smoothstep(412.0, 416.0, p.x))
+        * smoothstep(top, top + 4.0, p.y)
+        * (1.0 - smoothstep(bottom - 4.0, bottom, p.y));
+
+    float floorLight =
+        max(0.0, doorwayMask(p) - shadow)
+        * smoothstep(bottom, bottom + 8.0, p.y);
+
+    return clamp(opening + floorLight, 0.0, 1.0);
 }
 
 void main()
@@ -96,6 +120,26 @@ void main()
     return;
 }
     
-    vec4 warm = texture2D(warmTexture, uv);
-    gl_FragColor = mix(original, warm, weight) * gl_Color;
+vec4 warm = texture2D(warmTexture, uv);
+vec4 color = mix(original, warm, weight);
+
+if (leftIntensity > 0.0 || rightIntensity > 0.0)
+{
+    float left = leftIntensity
+        * corridorMask(p, leftShadow);
+
+    float right = rightIntensity
+        * corridorMask(
+            vec2(2172.0 - p.x, p.y),
+            rightShadow
+        );
+
+    float amount = clamp(left + right, 0.0, 1.0);
+
+    vec3 lit = texture2D(corridorTexture, uv).rgb;
+
+    color.rgb = mix(color.rgb, lit, amount);
+}
+
+gl_FragColor = color * gl_Color;
 }
