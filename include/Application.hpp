@@ -7,6 +7,8 @@
 #include "OfficeScreen.hpp"
 #include "NightIntroScreen.hpp"
 #include "SwitchSound.hpp"
+#include "NightCompleteScreen.hpp"
+#include "NightCompleteScreen.hpp"
 
 #include <SFML/Graphics/Font.hpp>
 #include <SFML/Graphics/Texture.hpp>
@@ -30,6 +32,7 @@ private:
         MainMenu,
         Controls,
         NightIntro,
+        NightComplete,
         Office
     };
 
@@ -48,6 +51,8 @@ private:
     ControlsScreen controlsScreen_;
     NightIntroScreen nightIntroScreen_;
     OfficeScreen officeScreen_;
+    NightCompleteScreen nightCompleteScreen_;
+	unsigned currentNight_ = 1u;
 
     Screen currentScreen_ = Screen::MainMenu;
     

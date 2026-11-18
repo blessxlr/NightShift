@@ -1,5 +1,7 @@
 #include "OfficeScreen.hpp"
 
+#include <string>
+
 #include <SFML/Graphics/Color.hpp>
 #include <SFML/Graphics/RenderTarget.hpp>
 #include <SFML/Window/Event.hpp>
@@ -93,6 +95,7 @@ OfficeScreen::OfficeScreen(const sf::Font& font)
 	  rightLever_(leverTexture_,makeRightLeverCorners(backgroundTexture_.getSize()),DoorLever::Side::Right),
 	  camera_(static_cast<float>(backgroundTexture_.getSize().x) * 1080.f/ static_cast<float>(backgroundTexture_.getSize().y)),
       nightLabel_(font, L"Ночь 1", 36u),
+      clockLabel_(font, "12 AM", 36u),
       leftLightButton_(backgroundTexture_, LightButton::Corners{
         sf::Vector2f{468.f, 290.f},
         sf::Vector2f{548.f, 295.f},
@@ -115,8 +118,18 @@ OfficeScreen::OfficeScreen(const sf::Font& font)
 
     background_.setScale({scale, scale});
 
-    nightLabel_.setPosition({1690.f, 50.f});
     nightLabel_.setFillColor(sf::Color::White);
+    clockLabel_.setFillColor(sf::Color::White);
+    
+    const auto nightBounds = nightLabel_.getLocalBounds();
+    
+    nightLabel_.setOrigin({nightBounds.position.x + nightBounds.size.x,
+		 nightBounds.position.y});
+		 
+	nightLabel_.setPosition({1840.f, 84.f});
+	clockLabel_.setPosition({1840.f, 36.f});
+	
+	refreshClock();
     
     doorTexture_.setSmooth(true);
     leverTexture_.setSmooth(true);
@@ -171,6 +184,7 @@ void OfficeScreen::handleEvent(const sf::Event& event, const sf::RenderTarget& t
     if (event.is<sf::Event::FocusLost>())
     {
         hasFocus_ = false;
+        nightTimer_.pause();
         camera_.stop();
         leftLightMouseHeld_ = false;
 		rightLightMouseHeld_ = false;
@@ -185,6 +199,10 @@ void OfficeScreen::handleEvent(const sf::Event& event, const sf::RenderTarget& t
     else if (event.is<sf::Event::FocusGained>())
     {
         hasFocus_ = true;
+        if (nightStarted_)
+        {
+			nightTimer_.resume();
+		}
         doorSounds_.resume();
     }
     else if (event.is<sf::Event::MouseLeft>())
@@ -240,6 +258,25 @@ void OfficeScreen::update(sf::Time elapsed)
     {
         return;
     }
+
+	if (!nightStarted_)
+	{
+		nightTimer_.start();
+		nightStarted_ = true;
+	}
+
+	nightTimer_.update();
+
+	if (nightTimer_.hour() != displayedHour_)
+	{
+		refreshClock();
+	}
+	
+	if (nightTimer_.isFinished())
+	{
+		fanSound_.stop();
+		return;
+	}
 
 	fanSound_.start();
 
@@ -320,12 +357,23 @@ void OfficeScreen::render(sf::RenderTarget& target) const
     monitor_.render(target);
 
     target.setView(previousView);
+    
+    target.draw(clockLabel_);
     target.draw(nightLabel_);
 }
 
-void OfficeScreen::startNight()
+void OfficeScreen::startNight(unsigned night)
 {
+	nightLabel_.setString(L"Ночь " + std::to_wstring(night));
+
+    nightTimer_.reset();
+    nightStarted_ = false;
+
+    refreshClock();
     hasFocus_ = true;
+    nightTimer_.reset();
+    nightStarted_ = false;
+    refreshClock();
     doorSounds_.stop();
     lightSounds_.stop();
     roomNeedsRedraw_ = true;
@@ -348,6 +396,11 @@ void OfficeScreen::startNight()
     lighting_.setCorridorLights(0.f, 0.f);
     leftLightButton_.setState(false, 0.f);
 	rightLightButton_.setState(false, 0.f);
+}
+
+bool OfficeScreen::hasFinishedNight() const
+{
+    return nightTimer_.isFinished();
 }
 
 void OfficeScreen::drawOffice(sf::RenderTarget& target) const
@@ -398,4 +451,22 @@ void OfficeScreen::toggleRightDoor()
     {
         doorSounds_.playRight();
     }
+}
+
+void OfficeScreen::refreshClock()
+{
+	displayedHour_ = nightTimer_.hour();
+	
+	const unsigned visibleHour = displayedHour_ == 0u ? 12u : displayedHour_;
+	
+	clockLabel_.setString(std::to_string(visibleHour) + " AM");
+	
+	const auto bounds = clockLabel_.getLocalBounds();
+	
+	clockLabel_.setOrigin({bounds.position.x + bounds.size.x, bounds.position.y});
+}
+
+void OfficeScreen::stopForNightCompletion()
+{
+    fanSound_.stop();
 }

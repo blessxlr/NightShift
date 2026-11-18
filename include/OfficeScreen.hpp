@@ -13,6 +13,7 @@
 #include "LightSounds.hpp"
 #include "OfficeFan.hpp"
 #include "FanSound.hpp"
+#include "NightTimer.hpp"
 
 #include <SFML/Graphics/Sprite.hpp>
 #include <SFML/Graphics/Text.hpp>
@@ -33,7 +34,9 @@ public:
     void handleEvent(const sf::Event& event, const sf::RenderTarget& target);
     void update(sf::Time elapsed);
     void render(sf::RenderTarget& target) const;
-    void startNight();
+    void startNight(unsigned night);
+    [[nodiscard]] bool hasFinishedNight() const;
+    void stopForNightCompletion();
 
 private:
     sf::Texture backgroundTexture_;
@@ -61,6 +64,7 @@ private:
     OfficeMonitor monitor_;
     OfficeCamera camera_;
     sf::Text nightLabel_;
+    sf::Text clockLabel_;
     bool hasFocus_ = true;
     OfficeLamp lamp_;
     CorridorLight leftLight_;
@@ -68,6 +72,11 @@ private:
     void drawOffice(sf::RenderTarget& target) const;
     
     void clearLightInput();
+
+	void refreshClock();
+	NightTimer nightTimer_;
+	bool nightStarted_ = false;
+	unsigned displayedHour_ = 0u;
 
 	bool leftLightKeyHeld_ = false;
 	bool rightLightKeyHeld_ = false;

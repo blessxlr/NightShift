@@ -77,7 +77,7 @@ void OfficeFan::buildShadow(float officeScale)
 
 void OfficeFan::update(sf::Time elapsed)
 {
-    constexpr float rotationSpeed = 2500.f;
+    constexpr float rotationSpeed = 3000.f;
 
     angle_ = std::fmod(
         angle_ + rotationSpeed * elapsed.asSeconds(),

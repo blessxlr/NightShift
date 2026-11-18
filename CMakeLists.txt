@@ -41,6 +41,10 @@ add_executable(NightShift
 	src/LightSounds.cpp
 	src/OfficeFan.cpp
 	src/FanSound.cpp
+	src/TimeMeter.cpp
+	src/TimeMeter_lin.cpp
+	src/NightTimer.cpp
+	src/NightCompleteScreen.cpp
 )
 
 target_include_directories(NightShift PRIVATE

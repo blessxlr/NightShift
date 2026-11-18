@@ -16,6 +16,7 @@ Application::Application()
       menuMusic_("assets/audio/menu-ambience.mp3"),
       switchSound_("assets/audio/night-start.wav"),
       mainMenu_(menuFont_),
+      nightCompleteScreen_(menuFont_),
       controlsScreen_(menuFont_, keyboardTexture_),
       nightIntroScreen_(menuFont_, switchSound_),
       officeScreen_(menuFont_)
@@ -74,14 +75,34 @@ void Application::update(sf::Time elapsed)
 
         if (nightIntroScreen_.isFinished())
         {
-            officeScreen_.startNight();
+            officeScreen_.startNight(currentNight_);;
             currentScreen_ = Screen::Office;
         }
     }
     else if (currentScreen_ == Screen::Office)
-    {
-        officeScreen_.update(elapsed);
-    }
+	{
+		officeScreen_.update(elapsed);
+	
+		if (officeScreen_.hasFinishedNight())
+		{
+			officeScreen_.stopForNightCompletion();
+
+			nightCompleteScreen_.start();
+			currentScreen_ = Screen::NightComplete;
+		}
+	}
+	else if (currentScreen_ == Screen::NightComplete)
+	{
+		nightCompleteScreen_.update(elapsed);
+	
+		if (nightCompleteScreen_.isFinished())
+		{
+			++currentNight_;
+	
+			nightIntroScreen_.start(currentNight_, false);
+			currentScreen_ = Screen::NightIntro;
+		}
+	}
 }
 
 void Application::handleMenuAction(MenuAction action)
@@ -90,7 +111,8 @@ void Application::handleMenuAction(MenuAction action)
     {
         case MenuAction::NewGame:
 			menuMusic_.stop();
-			nightIntroScreen_.start(1u, true);
+			currentNight_ = 1u;
+			nightIntroScreen_.start(currentNight_, true);
 			currentScreen_ = Screen::NightIntro;
 			break;
 
@@ -181,6 +203,10 @@ void Application::render()
         case Screen::Office:
             officeScreen_.render(window_);
             break;
+            
+         case Screen::NightComplete:
+			nightCompleteScreen_.render(window_);
+			break;   
     }
 
     window_.display();
