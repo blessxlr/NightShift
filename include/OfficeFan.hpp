@@ -20,6 +20,8 @@ public:
     void reset();
 
     void render(sf::RenderTarget& target) const;
+    
+    void stop();
 
 private:
     void buildShadow(float officeScale);
@@ -35,4 +37,5 @@ private:
     sf::Vector2f position_;
     float scale_ = 1.f;
     float angle_ = 0.f;
+    bool running_ = true;
 };

@@ -24,6 +24,7 @@ public:
     );
 
     void update(sf::Time elapsed);
+    void turnOff();
     void render(sf::RenderTarget& target) const;
 
 private:

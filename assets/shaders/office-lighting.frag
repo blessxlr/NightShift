@@ -6,6 +6,7 @@ uniform vec2 panoramaSize;
 uniform float leftClosed;
 uniform float rightClosed;
 uniform bool lampPass;
+uniform bool blackout;
 uniform float lampBrightness;
 uniform sampler2D corridorTexture;
 
@@ -139,6 +140,27 @@ if (leftIntensity > 0.0 || rightIntensity > 0.0)
     vec3 lit = texture2D(corridorTexture, uv).rgb;
 
     color.rgb = mix(color.rgb, lit, amount);
+}
+
+if (blackout)
+{
+    // Ослабляем ореол, сохраняя детали стены.
+    vec2 glowOffset = (p - vec2(1081.0, 139.0)) / vec2(145.0, 120.0);
+    float glowMask = 1.0 - smoothstep(0.15, 1.0, length(glowOffset));
+    color.rgb *= mix(1.0, 0.55, glowMask);
+
+    // Приглушаем саму светящуюся часть лампы.
+    vec2 lampOffset = (p - vec2(1081.0, 104.0)) / vec2(63.0, 24.0);
+    float lampMask = 1.0 - smoothstep(0.92, 1.10, length(lampOffset));
+    float gray = dot(color.rgb, vec3(0.299, 0.587, 0.114));
+    color.rgb = mix(color.rgb, vec3(gray * 0.17), lampMask);
+
+    // Закрываем стекло ЭЛТ вплоть до скруглённых краёв.
+    vec2 crt = abs(p - vec2(1145.0, 411.0)) - vec2(32.0, 23.0);
+    float crtEdge = length(max(crt, vec2(0.0)))
+                  + min(max(crt.x, crt.y), 0.0) - 7.0;
+    float crtMask = 1.0 - smoothstep(-1.0, 1.5, crtEdge);
+    color.rgb = mix(color.rgb, vec3(0.035, 0.042, 0.046), crtMask);
 }
 
 gl_FragColor = color * gl_Color;

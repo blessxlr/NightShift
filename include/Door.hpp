@@ -23,6 +23,7 @@ public:
     Door(const sf::Texture& texture, const Corners& corners);
 
     void toggle();
+    void forceOpen();
     void reset();
     void update(sf::Time elapsed);
     void render(sf::RenderTarget& target) const;

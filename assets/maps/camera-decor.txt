@@ -1,0 +1,44 @@
+ 
+backdrop 100 20 58
+  
+light 72 58 0.85
+light 125 48 1.00
+light 100 123 0.85
+light 100 175 0.65
+ 
+duct 86 101 90 189 27.6 32.0
+duct 25 24 28 96 27.5 32.0
+
+light 144 135 1.15
+light 182 167 0.48
+duct 121 115 193 118 28.5 31.5
+cabinet 129 115 171 120 0 25
+
+light 79 143 1.05
+light 20 150 0.86
+light -27 187 0.89
+light 42 200 0.58
+table -48 184 -9 197 3
+table 7 184 46 197 3
+table -48 142 -9 155 3
+table 7 142 46 155 3
+
+light 19 235 0.92
+light -34 271 0.46
+arcade -42 232 south 0
+arcade -25 232 south 1
+arcade -8 232 south 2
+arcade 54 249 west 1
+arcade 54 267 west 0
+arcade 54 285 west 2
+
+light 232 138 1.12
+light 248 169 0.66
+workbench 227 120 241 144
+rack 239 159 249 183
+part 234 137 10.1 8.8 0
+part 234 125 11 6.5 3
+part 244 174 21 7 1
+part 243 164 21 6 2
+part 244 177 12 6.5 3
+part 243 162 3 6 1

@@ -3,17 +3,19 @@
 #include <SFML/Graphics/Color.hpp>
 #include <SFML/Graphics/RenderTarget.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 
-TvEffect::TvEffect()
+TvEffect::TvEffect(float strength)
     : noise_(sf::PrimitiveType::Lines, noiseLineCount_ * 2),
       scanLines_(sf::PrimitiveType::Lines, scanLineCount_ * 2),
       band_({width_, 60.f}),
       flicker_({width_, height_}),
-      randomEngine_(std::random_device{}())
+      randomEngine_(std::random_device{}()),
+      strength_(std::clamp(strength, 0.f, 1.f))
 {
-    const sf::Color scanColor(0, 0, 0, 55);
+    const sf::Color scanColor(0, 0, 0, static_cast<std::uint8_t>(55.f * strength_));
 
     for (std::size_t i = 0; i < scanLineCount_; ++i)
     {
@@ -30,7 +32,7 @@ TvEffect::TvEffect()
         };
     }
 
-    band_.setFillColor(sf::Color(255, 255, 255, 22));
+    band_.setFillColor(sf::Color(255, 255, 255, static_cast<std::uint8_t>(22.f * strength_)));
     band_.setPosition({0.f, bandY_});
 
     refreshNoise();
@@ -51,7 +53,7 @@ void TvEffect::refreshNoise()
         const float y = positionY(randomEngine_);
 
         const auto opacity = static_cast<std::uint8_t>(
-            noiseOpacity(randomEngine_)
+            noiseOpacity(randomEngine_) * strength_
         );
 
         const sf::Color color(255, 255, 255, opacity);
@@ -68,7 +70,7 @@ void TvEffect::refreshNoise()
     }
 
     const auto darkness = static_cast<std::uint8_t>(
-        flickerOpacity(randomEngine_)
+        flickerOpacity(randomEngine_) * strength_
     );
 
     flicker_.setFillColor(sf::Color(0, 0, 0, darkness));
@@ -103,3 +105,4 @@ void TvEffect::render(sf::RenderTarget& target) const
     target.draw(scanLines_);
     target.draw(band_);
 }
+

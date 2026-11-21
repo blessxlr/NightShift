@@ -77,6 +77,10 @@ void OfficeFan::buildShadow(float officeScale)
 
 void OfficeFan::update(sf::Time elapsed)
 {
+	if (!running_)
+	{
+		return;
+	}
     constexpr float rotationSpeed = 3000.f;
 
     angle_ = std::fmod(
@@ -102,6 +106,7 @@ void OfficeFan::setBrightness(float brightness)
 
 void OfficeFan::reset()
 {
+	running_ = true;
     angle_ = 0.f;
     rotor_.setRotation(sf::degrees(0.f));
 
@@ -123,4 +128,9 @@ void OfficeFan::render(sf::RenderTarget& target) const
 
     target.draw(rotor_, rotorStates);
     target.draw(guard_, states);
+}
+
+void OfficeFan::stop()
+{
+    running_ = false;
 }

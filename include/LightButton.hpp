@@ -1,53 +1,28 @@
 #pragma once
 
-#include <SFML/Graphics/ConvexShape.hpp>
 #include <SFML/Graphics/VertexArray.hpp>
-
 #include <array>
 
-namespace sf
-{
-    class Font;
-    class RenderTarget;
-    class Texture;
-}
+namespace sf { class RenderTarget; class Texture; }
 
 class LightButton
 {
 public:
     using Corners = std::array<sf::Vector2f, 4>;
+    enum class Side { Left, Right };
 
-	enum class Side
-    {
-        Left,
-        Right
-    };
-
-    LightButton(
-		const sf::Texture& background,
-		const Corners& corners,
-		Side side
-	);
-
+    LightButton(const sf::Texture& background, const Corners& corners, Side side);
     void setState(bool pressed, float intensity);
-
-    bool contains(sf::Vector2f point) const;
+    bool contains(sf::Vector2f position) const;
     void render(sf::RenderTarget& target) const;
 
 private:
-    sf::Vector2f point(float u, float v) const;
-
-    void place(sf::ConvexShape& shape, float inset, float shift = 0.f);
-
-    const sf::Texture& background_;
+    sf::Vector2f project(sf::Vector2f uv, float depth) const;
     Corners corners_;
     Side side_;
-
-	sf::Vector2f project(float u,float v, float depth) const;
-
-    sf::VertexArray housing_;
-    sf::ConvexShape shadow_;
-    sf::ConvexShape rim_;
-    sf::ConvexShape face_;
-    sf::ConvexShape sideFace_{4u};
+    const sf::Texture* texture_ = nullptr;
+    sf::VertexArray base_{sf::PrimitiveType::Triangles};
+    sf::VertexArray cap_{sf::PrimitiveType::Triangles};
+    bool pressed_ = false;
+    int light_ = -1;
 };

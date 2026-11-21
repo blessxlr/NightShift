@@ -29,6 +29,8 @@ public:
 	
 	void update(sf::Time elapsed);
 	
+	void setNight(unsigned night);
+	
 private:
 
 	MenuAction actionAt(sf::Vector2f point) const;

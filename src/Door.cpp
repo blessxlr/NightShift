@@ -28,6 +28,11 @@ void Door::toggle()
     wantsClosed_ = !wantsClosed_;
 }
 
+void Door::forceOpen()
+{
+    wantsClosed_ = false;
+}
+
 void Door::reset()
 {
     wantsClosed_ = false;

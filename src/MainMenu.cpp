@@ -7,6 +7,7 @@
 #include <SFML/Graphics/Texture.hpp>
 
 #include <algorithm>
+#include <string>
 
 MainMenu::MainMenu(const sf::Font& font)
     : title_(font, "Night\nShift", 96u),
@@ -150,4 +151,15 @@ MenuAction MainMenu::handleEvent(const sf::Event& event, const sf::RenderTarget&
 void MainMenu::resetHover()
 {
 	isButtonHovered_ = false;
+}
+
+void MainMenu::setNight(unsigned night)
+{
+    nightLabel_.setString(
+        L"Ночь " + std::to_wstring(night)
+    );
+
+    nightLabel_.setOrigin(
+        nightLabel_.getLocalBounds().position
+    );
 }

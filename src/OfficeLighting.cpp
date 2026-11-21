@@ -29,12 +29,13 @@ OfficeLighting::OfficeLighting(const sf::Texture& originalTexture)
     });
 
 	shader_.setUniform("lampPass", false);
+	setBlackout(false);
 	
 	corridorTexture_.setSmooth(true);
 
 	shader_.setUniform("corridorTexture", corridorTexture_);
 
-setCorridorLights(0.f, 0.f);
+	setCorridorLights(0.f, 0.f);
 
 	lampShader_.setUniform("lampPass", true);
 	lampShader_.setUniform("originalTexture", sf::Shader::CurrentTexture);
@@ -93,4 +94,9 @@ void OfficeLighting::setCorridorLights(float left, float right)
         "rightIntensity",
         std::clamp(right, 0.f, 1.f)
     );
+}
+
+void OfficeLighting::setBlackout(bool enabled)
+{
+    shader_.setUniform("blackout", enabled);
 }

@@ -7,6 +7,7 @@
 #include <SFML/Window/Event.hpp>
 #include <SFML/Window/Keyboard.hpp>
 #include <SFML/Window/Mouse.hpp>
+#include <SFML/Graphics/RectangleShape.hpp>
 
 namespace
 {
@@ -79,7 +80,7 @@ namespace
 	}
 }
 
-OfficeScreen::OfficeScreen(const sf::Font& font)
+OfficeScreen::OfficeScreen(const sf::Font& font, SwitchSound& switchSound)
     : backgroundTexture_("assets/images/office-panorama.png"),
       roomSurface_(sf::Vector2u{backgroundTexture_.getSize().x * 1080u / backgroundTexture_.getSize().y,1080u}),
 	  roomImage_(roomSurface_.getTexture()),
@@ -94,8 +95,11 @@ OfficeScreen::OfficeScreen(const sf::Font& font)
 	  leftLever_(leverTexture_, makeLeftLeverCorners(backgroundTexture_.getSize())),
 	  rightLever_(leverTexture_,makeRightLeverCorners(backgroundTexture_.getSize()),DoorLever::Side::Right),
 	  camera_(static_cast<float>(backgroundTexture_.getSize().x) * 1080.f/ static_cast<float>(backgroundTexture_.getSize().y)),
+      cameraMonitor_(font, switchSound),
       nightLabel_(font, L"Ночь 1", 36u),
       clockLabel_(font, "12 AM", 36u),
+      powerLabel_(font, L"", 30u),
+      powerUsageLabel_(font, L"Расход:", 26u),
       leftLightButton_(backgroundTexture_, LightButton::Corners{
         sf::Vector2f{468.f, 290.f},
         sf::Vector2f{548.f, 295.f},
@@ -128,6 +132,11 @@ OfficeScreen::OfficeScreen(const sf::Font& font)
 		 
 	nightLabel_.setPosition({1840.f, 84.f});
 	clockLabel_.setPosition({1840.f, 36.f});
+	powerLabel_.setPosition({64.f, 940.f});
+	powerLabel_.setFillColor(sf::Color::White);
+	powerUsageLabel_.setPosition({64.f, 984.f});
+	powerUsageLabel_.setFillColor(sf::Color::White);
+	refreshPowerHud();
 	
 	refreshClock();
     
@@ -137,10 +146,60 @@ OfficeScreen::OfficeScreen(const sf::Font& font)
 
 void OfficeScreen::handleEvent(const sf::Event& event, const sf::RenderTarget& target)
 {
-	if (hasFocus_)
+	const bool tabletBarEnabled =
+    hasFocus_ && power_.hasPower() && !cameraMonitor_.tabletInMotion();
+
+	if (tabletHandle_.entered(event, target, tabletBarEnabled))
+	{
+		handleEvent(
+			sf::Event::KeyPressed{sf::Keyboard::Key::Space, sf::Keyboard::Scancode::Space},
+			target
+		);
+		return;
+	}
+		
+	if (hasFocus_ && power_.hasPower())
 	{
 		if (const auto* key = event.getIf<sf::Event::KeyPressed>())
 		{
+			if (key->scancode == sf::Keyboard::Scancode::Space)
+			{
+				cameraMonitor_.toggle();
+				camera_.stop();
+				clearLightInput();
+				return;
+			}
+
+			if (cameraMonitor_.isRaised())
+			{
+				if (key->scancode == sf::Keyboard::Scancode::Num1)
+				{
+					cameraMonitor_.selectCamera(1u);
+				}
+				else if (key->scancode == sf::Keyboard::Scancode::Num2)
+				{
+					cameraMonitor_.selectCamera(2u);
+				}
+				else if (key->code == sf::Keyboard::Key::Num3)
+				{
+					cameraMonitor_.selectCamera(3);
+				}
+				else if (key->code == sf::Keyboard::Key::Num4)
+				{
+					cameraMonitor_.selectCamera(4);
+				}
+				else if (key->code == sf::Keyboard::Key::Num5)
+				{
+					cameraMonitor_.selectCamera(5);
+				}
+				else if (key->code == sf::Keyboard::Key::Num6)
+				{
+					cameraMonitor_.selectCamera(6);
+				}
+
+				return;
+			}
+			
 			if (key->code == sf::Keyboard::Key::A)
 			{
 				toggleLeftDoor();
@@ -184,6 +243,7 @@ void OfficeScreen::handleEvent(const sf::Event& event, const sf::RenderTarget& t
     if (event.is<sf::Event::FocusLost>())
     {
         hasFocus_ = false;
+        blackoutSound_.pause();
         nightTimer_.pause();
         camera_.stop();
         leftLightMouseHeld_ = false;
@@ -199,6 +259,7 @@ void OfficeScreen::handleEvent(const sf::Event& event, const sf::RenderTarget& t
     else if (event.is<sf::Event::FocusGained>())
     {
         hasFocus_ = true;
+        blackoutSound_.resume();
         if (nightStarted_)
         {
 			nightTimer_.resume();
@@ -211,7 +272,7 @@ void OfficeScreen::handleEvent(const sf::Event& event, const sf::RenderTarget& t
     }
     else if (const auto* mouse = event.getIf<sf::Event::MouseMoved>())
     {
-        if (hasFocus_)
+        if (hasFocus_ && !cameraMonitor_.isRaised())
         {
             const float windowWidth =
                 static_cast<float>(target.getSize().x);
@@ -224,13 +285,19 @@ void OfficeScreen::handleEvent(const sf::Event& event, const sf::RenderTarget& t
             }
         }
     }
-    if (hasFocus_)
+    if (hasFocus_ && power_.hasPower())
 	{
 		if (const auto* mouse =
 			event.getIf<sf::Event::MouseButtonPressed>())
 		{
 			if (mouse->button == sf::Mouse::Button::Left)
 			{
+				if (cameraMonitor_.isRaised())
+				{
+					cameraMonitor_.handleClick(target.mapPixelToCoords(mouse->position));
+					return;
+				}
+				
 				const sf::Vector2f point = target.mapPixelToCoords(
 					mouse->position,
 					camera_.getView()
@@ -278,31 +345,67 @@ void OfficeScreen::update(sf::Time elapsed)
 		return;
 	}
 
-	fanSound_.start();
+	cameraMonitor_.update(elapsed);
 
 	const bool leftRequested = leftLightKeyHeld_ || leftLightMouseHeld_;
 
 	const bool rightRequested = rightLightKeyHeld_ || rightLightMouseHeld_;
+	
+	const bool leftDoorActive = leftDoor_.wantsClosed() || leftDoor_.isMoving();
+	const bool rightDoorActive = rightDoor_.wantsClosed() || rightDoor_.isMoving();
 
-	leftLight_.setRequested(leftRequested);
-	rightLight_.setRequested(rightRequested);
+	const unsigned activeDevices =
+		static_cast<unsigned>(leftDoorActive) +
+		static_cast<unsigned>(rightDoorActive) +
+		static_cast<unsigned>(leftRequested) +
+		static_cast<unsigned>(rightRequested) +
+		static_cast<unsigned>(cameraMonitor_.isRaised());
 
-	const float previousLeftLight = leftLight_.intensity();
-	const float previousRightLight = rightLight_.intensity();
+	const unsigned previousPercent = power_.percent();
+	const unsigned previousUsage = power_.usageLevel();
 
-	leftLight_.update(elapsed);
-	rightLight_.update(elapsed);
-	lightSounds_.update(leftLight_.intensity(), rightLight_.intensity());
-	leftLightButton_.setState(leftRequested, leftLight_.intensity());
-	rightLightButton_.setState(rightRequested, rightLight_.intensity());
-	lighting_.setCorridorLights(leftLight_.intensity(), rightLight_.intensity());
+	power_.update(nightTimer_.progress(), activeDevices);
 
-	if (leftLight_.intensity() != previousLeftLight || rightLight_.intensity() != previousRightLight)
+	const bool powered = power_.hasPower();
+
+	if (previousPercent > 0u && !powered)
 	{
-		roomNeedsRedraw_ = true;
+		beginBlackout();
 	}
 
-    camera_.update(elapsed);
+	if (power_.percent() != previousPercent ||
+		power_.usageLevel() != previousUsage)
+	{
+		refreshPowerHud();
+	}
+
+	if (powered)
+	{
+		fanSound_.start();
+
+		leftLight_.setRequested(leftRequested);
+		rightLight_.setRequested(rightRequested);
+
+		const float previousLeftLight = leftLight_.intensity();
+		const float previousRightLight = rightLight_.intensity();
+
+		leftLight_.update(elapsed);
+		rightLight_.update(elapsed);
+
+		lightSounds_.update(leftLight_.intensity(), rightLight_.intensity());
+		leftLightButton_.setState(leftRequested, leftLight_.intensity());
+		rightLightButton_.setState(rightRequested, rightLight_.intensity());
+		lighting_.setCorridorLights(leftLight_.intensity(), rightLight_.intensity());
+
+		if (leftLight_.intensity() != previousLeftLight ||
+			rightLight_.intensity() != previousRightLight)
+		{
+			roomNeedsRedraw_ = true;
+		}
+	}
+
+	camera_.update(elapsed);
+
     const float previousLeft = leftDoor_.closedAmount();
 	const float previousRight = rightDoor_.closedAmount();
 
@@ -324,15 +427,25 @@ void OfficeScreen::update(sf::Time elapsed)
     lighting_.setLampBrightness(lamp_.brightness());
     fan_.update(elapsed);
 	fan_.setBrightness(lamp_.brightness());
+	
+	if (powered)
+	{
+		monitor_.update(elapsed);
+		lamp_.update(elapsed);
+		lighting_.setLampBrightness(lamp_.brightness());
+		fan_.update(elapsed);
+		fan_.setBrightness(lamp_.brightness());
+	}
 }
 
 void OfficeScreen::render(sf::RenderTarget& target) const
 {
+	const auto tabletHudView = target.getView();
     const sf::View previousView = target.getView();
 
     target.setView(camera_.getView());
 
-    if (lamp_.brightness() >= 1.f)
+    if (!power_.hasPower() || lamp_.brightness() >= 1.f)
     {
         drawOffice(target);
     }
@@ -354,16 +467,32 @@ void OfficeScreen::render(sf::RenderTarget& target) const
         lighting_.renderRoom(target, roomImage_);
     }
 	fan_.render(target);
-    monitor_.render(target);
+    if (power_.hasPower())
+	{
+		monitor_.render(target);
+	}
 
     target.setView(previousView);
     
+    cameraMonitor_.render(target);
+    if (power_.hasPower() && !cameraMonitor_.tabletInMotion())
+    tabletHandle_.render(target, tabletHudView, cameraMonitor_.tabletBarIsOpen());
+    
+    if (!power_.hasPower())
+	{
+		sf::RectangleShape darkness({1920.f, 1080.f});
+		darkness.setFillColor(sf::Color(0, 0, 0, 220));
+		target.draw(darkness);
+	}
+    
     target.draw(clockLabel_);
     target.draw(nightLabel_);
+    renderPowerHud(target);
 }
 
 void OfficeScreen::startNight(unsigned night)
 {
+	tabletHandle_.reset();
 	nightLabel_.setString(L"Ночь " + std::to_wstring(night));
 
     nightTimer_.reset();
@@ -382,6 +511,12 @@ void OfficeScreen::startNight(unsigned night)
     fanSound_.stop();
     lighting_.setLampBrightness(lamp_.brightness());
 	
+	power_.reset();
+	cameraMonitor_.reset();
+	lighting_.setBlackout(false);
+	monitor_.update(sf::Time{});
+	refreshPowerHud();
+	
 	clearLightInput();
 	leftLight_.reset();
 	rightLight_.reset();
@@ -396,6 +531,8 @@ void OfficeScreen::startNight(unsigned night)
     lighting_.setCorridorLights(0.f, 0.f);
     leftLightButton_.setState(false, 0.f);
 	rightLightButton_.setState(false, 0.f);
+	
+	blackoutSound_.stop();
 }
 
 bool OfficeScreen::hasFinishedNight() const
@@ -466,7 +603,78 @@ void OfficeScreen::refreshClock()
 	clockLabel_.setOrigin({bounds.position.x + bounds.size.x, bounds.position.y});
 }
 
+void OfficeScreen::refreshPowerHud()
+{
+    powerLabel_.setString(
+        L"Энергия: " + std::to_wstring(power_.percent()) + L"%"
+    );
+}
+
+void OfficeScreen::renderPowerHud(sf::RenderTarget& target) const
+{
+    target.draw(powerLabel_);
+    target.draw(powerUsageLabel_);
+
+    const auto bounds = powerUsageLabel_.getGlobalBounds();
+    const float startX = bounds.position.x + bounds.size.x + 14.f;
+    const float y = bounds.position.y + (bounds.size.y - 14.f) / 2.f;
+    const unsigned usage = power_.usageLevel();
+
+    const sf::Color colors[] = {
+        {82, 207, 148},
+        {82, 207, 148},
+        {235, 194, 82},
+        {235, 139, 68},
+        {227, 78, 71}
+    };
+
+    sf::RectangleShape segment({22.f, 14.f});
+
+    for (unsigned i = 0; i < 5u; ++i)
+    {
+        segment.setPosition({startX + 27.f * i, y});
+        segment.setFillColor(
+            i < usage ? colors[i] : sf::Color(42, 43, 42)
+        );
+        target.draw(segment);
+    }
+}
+
 void OfficeScreen::stopForNightCompletion()
 {
+	cameraMonitor_.reset();
+	
     fanSound_.stop();
+    lightSounds_.stop();
+    doorSounds_.stop();
+
+    clearLightInput();
+    camera_.stop();
+    
+    blackoutSound_.stop();
+}
+
+void OfficeScreen::beginBlackout()
+{
+	cameraMonitor_.lower();
+	
+    clearLightInput();
+
+    leftDoor_.forceOpen();
+    rightDoor_.forceOpen();
+
+    leftLight_.reset();
+    rightLight_.reset();
+    leftLightButton_.setState(false, 0.f);
+    rightLightButton_.setState(false, 0.f);
+    lighting_.setCorridorLights(0.f, 0.f);
+    roomNeedsRedraw_ = true;
+
+    lighting_.setBlackout(true);
+	fan_.stop();
+    fanSound_.stop();
+    lightSounds_.stop();
+    doorSounds_.stop();
+    
+    blackoutSound_.play();
 }

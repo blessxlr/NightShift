@@ -45,6 +45,11 @@ add_executable(NightShift
 	src/TimeMeter_lin.cpp
 	src/NightTimer.cpp
 	src/NightCompleteScreen.cpp
+	src/SaveGame.cpp
+	src/PowerSystem.cpp
+	src/CameraMonitor.cpp
+	src/BuildingMap.cpp
+	src/CameraFeed.cpp
 )
 
 target_include_directories(NightShift PRIVATE

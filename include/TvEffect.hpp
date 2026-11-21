@@ -15,7 +15,7 @@ namespace sf
 class TvEffect
 {
 public:
-    TvEffect();
+    explicit TvEffect(float strength = 1.f);
 
     void update(sf::Time elapsed);
     void render(sf::RenderTarget& target) const;
@@ -36,7 +36,9 @@ private:
     sf::RectangleShape flicker_;
 
     std::mt19937 randomEngine_;
+    float strength_;
 
     float noiseElapsed_ = 0.f;
     float bandY_ = -60.f;
 };
+

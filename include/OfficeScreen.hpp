@@ -14,6 +14,10 @@
 #include "OfficeFan.hpp"
 #include "FanSound.hpp"
 #include "NightTimer.hpp"
+#include "PowerSystem.hpp"
+#include "CameraMonitor.hpp"
+#include "SwitchSound.hpp"
+#include "TabletHandle.hpp"
 
 #include <SFML/Graphics/Sprite.hpp>
 #include <SFML/Graphics/Text.hpp>
@@ -30,7 +34,7 @@ namespace sf
 class OfficeScreen
 {
 public:
-    explicit OfficeScreen(const sf::Font& font);
+    explicit OfficeScreen(const sf::Font& font, SwitchSound& switchSound);
     void handleEvent(const sf::Event& event, const sf::RenderTarget& target);
     void update(sf::Time elapsed);
     void render(sf::RenderTarget& target) const;
@@ -46,6 +50,7 @@ private:
 	sf::Sprite roomImage_;
 	OfficeFan fan_;
 	FanSound fanSound_;
+	SwitchSound blackoutSound_{"assets/audio/power-cut.mp3"};
     OfficeLighting lighting_;
     sf::Texture doorTexture_;
     sf::Texture leverTexture_;
@@ -58,13 +63,18 @@ private:
     DoorReflection leftReflection_;
     DoorReflection rightReflection_;
     DoorLever leftLever_;
+    TabletHandle tabletHandle_;
     DoorLever rightLever_;
     LightButton leftLightButton_;
 	LightButton rightLightButton_;
     OfficeMonitor monitor_;
     OfficeCamera camera_;
+    CameraMonitor cameraMonitor_;
     sf::Text nightLabel_;
     sf::Text clockLabel_;
+    sf::Text powerLabel_;
+    sf::Text powerUsageLabel_;
+	PowerSystem power_;
     bool hasFocus_ = true;
     OfficeLamp lamp_;
     CorridorLight leftLight_;
@@ -72,8 +82,12 @@ private:
     void drawOffice(sf::RenderTarget& target) const;
     
     void clearLightInput();
+    void beginBlackout();
 
 	void refreshClock();
+	void refreshPowerHud();
+	void renderPowerHud(sf::RenderTarget& target) const;
+	
 	NightTimer nightTimer_;
 	bool nightStarted_ = false;
 	unsigned displayedHour_ = 0u;

@@ -1,178 +1,138 @@
 #include "LightButton.hpp"
-
-#include <SFML/Graphics/RenderStates.hpp>
 #include <SFML/Graphics/RenderTarget.hpp>
 #include <SFML/Graphics/Texture.hpp>
-
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdint>
 
+namespace
+{
+constexpr int segments = 48;
+constexpr float radius = 0.245f;
+const sf::Vector2f centre{0.5f, 0.49f};
+
+const sf::Texture* faceTexture()
+{
+    static sf::Texture texture;
+    static const bool ready = [] {
+        if (!texture.loadFromFile("assets/images/light-button.png")) return false;
+        texture.setSmooth(true);
+        (void)texture.generateMipmap();
+        return true;
+    }();
+    return ready ? &texture : nullptr;
+}
+
+sf::Vector2f direction(int i)
+{
+    const float a = (i % segments) * (6.283185307f / segments);
+    return {std::cos(a), std::sin(a)};
+}
+
+sf::Vector2f plateEdge(sf::Vector2f d)
+{
+    const float t = std::min((d.x < 0 ? -centre.x : 1.f-centre.x) /
+                                 (d.x == 0.f ? 1e-12f : d.x),
+                             (d.y < 0 ? -centre.y : 1.f-centre.y) /
+                                 (d.y == 0.f ? 1e-12f : d.y));
+    return centre + d*t;
+}
+
+void quad(sf::VertexArray& mesh, sf::Vertex a, sf::Vertex b, sf::Vertex c, sf::Vertex d)
+{
+    for (auto v : {a,b,c,a,c,d}) mesh.append(v);
+}
+}
+
+sf::Vector2f LightButton::project(sf::Vector2f uv, float depth) const
+{
+    const float sign = side_ == Side::Left ? 1.f : -1.f;
+    const float u = 0.5f + 0.70710678f * (uv.x - 0.5f + sign * (depth - 0.05f));
+    const auto top = corners_[0] + (corners_[1]-corners_[0])*u;
+    const auto bottom = corners_[3] + (corners_[2]-corners_[3])*u;
+    return top + (bottom-top)*(uv.y + depth*0.05f);
+}
+
 LightButton::LightButton(const sf::Texture& background, const Corners& corners, Side side)
-    : background_(background),
-      corners_(corners),
-      side_(side),
-      housing_(sf::PrimitiveType::Triangles, 6u),
-      shadow_(4u),
-      rim_(4u),
-      face_(4u)
+    : corners_(corners), side_(side), texture_(faceTexture())
 {
-    const float scale =
-        1080.f / static_cast<float>(background_.getSize().y);
-
-    for (auto& corner : corners_)
+    for (auto& p : corners_) p *= 1080.f / background.getSize().y;
+    const sf::Vector2f size = texture_ ? sf::Vector2f(texture_->getSize()) : sf::Vector2f{1,1};
+    auto vertex = [&](sf::Vector2f uv, float depth, sf::Color tint) -> sf::Vertex {
+        return {project(uv, depth), tint, {uv.x*size.x, uv.y*size.y}};
+    };
+    const Corners square{{{0,0},{1,0},{1,1},{0,1}}};
+    const float sign = side == Side::Left ? -1.f : 1.f;
+    const auto shadow = [&](int i) -> sf::Vertex {
+        return {project(square[i] + sf::Vector2f{sign*0.035f,0.055f},0.f), {0,0,0,110}, {}};
+    };
+    quad(base_,shadow(0),shadow(1),shadow(2),shadow(3));
+    const auto edgeColor = sf::Color(72,66,62);
+    for (int i=0; i<4; ++i)
     {
-        corner *= scale;
+        auto a=square[i], b=square[(i+1)%4];
+        quad(base_, vertex(a,0.f,edgeColor), vertex(b,0.f,edgeColor),
+                    vertex(b,0.13f,edgeColor), vertex(a,0.13f,edgeColor));
     }
-
-    const Corners material{
-        sf::Vector2f{110.f, 285.f},
-        sf::Vector2f{150.f, 285.f},
-        sf::Vector2f{150.f, 325.f},
-        sf::Vector2f{110.f, 325.f}
-    };
-
-    const Corners local{
-        sf::Vector2f{0.f, 0.f},
-        sf::Vector2f{1.f, 0.f},
-        sf::Vector2f{1.f, 1.f},
-        sf::Vector2f{0.f, 1.f}
-    };
-
-    constexpr std::array<std::size_t, 6> indices{
-        0u, 1u, 2u, 0u, 2u, 3u
-    };
-
-    for (std::size_t i = 0; i < indices.size(); ++i)
+    const sf::Color steel(160,148,134);
+    
+    for (int i=0; i<segments; ++i)
     {
-        const auto corner = indices[i];
-
-        housing_[i] = {
-            project(
-                local[corner].x,
-                local[corner].y,
-                0.10f
-            ),
-            sf::Color::White,
-            material[corner]
-        };
+        auto a=direction(i), b=direction(i+1);
+        quad(base_, vertex(plateEdge(a),0.13f,steel), vertex(plateEdge(b),0.13f,steel),
+                    vertex(centre+b*radius,0.13f,steel), vertex(centre+a*radius,0.13f,steel));
     }
-
-    const float edge =
-        side_ == Side::Left ? 0.f : 1.f;
-
-    sideFace_.setPoint(0, project(edge, 0.f, 0.f));
-    sideFace_.setPoint(1, project(edge, 0.f, 0.10f));
-    sideFace_.setPoint(2, project(edge, 1.f, 0.10f));
-    sideFace_.setPoint(3, project(edge, 1.f, 0.f));
-    sideFace_.setFillColor(sf::Color(48, 47, 43));
-
-    place(shadow_, 0.f);
-    shadow_.setPosition({2.f, 3.f});
-    shadow_.setFillColor(sf::Color(0, 0, 0, 100));
-
-    place(rim_, 0.11f, 0.105f);
-    rim_.setFillColor(sf::Color(22, 23, 21));
-
-    setState(false, 0.f);
-}
-
-sf::Vector2f LightButton::point(float u, float v) const
-{
-    const auto top =
-        corners_[0] + (corners_[1] - corners_[0]) * u;
-
-    const auto bottom =
-        corners_[3] + (corners_[2] - corners_[3]) * u;
-
-    return top + (bottom - top) * v;
-}
-
-sf::Vector2f LightButton::project(float u, float v, float depth) const
-{
-    constexpr float cos45 = 0.70710678f;
-    constexpr float sin45 = 0.70710678f;
-
-    const float direction =
-        side_ == Side::Left ? 1.f : -1.f;
-
-    const float x = u - 0.5f;
-    const float z = depth - 0.05f;
-
-    const float rotatedX =
-        cos45 * x + direction * sin45 * z;
-
-    return point(0.5f + rotatedX, v);
-}
-
-void LightButton::place(sf::ConvexShape& shape, float inset, float depth)
-{
-    shape.setPoint(0, project(inset, inset, depth));
-
-    shape.setPoint(
-        1,
-        project(1.f - inset, inset, depth)
-    );
-
-    shape.setPoint(
-        2,
-        project(1.f - inset, 1.f - inset, depth)
-    );
-
-    shape.setPoint(
-        3,
-        project(inset, 1.f - inset, depth)
-    );
+    setState(false,0.f);
 }
 
 void LightButton::setState(bool pressed, float intensity)
 {
-    const float level = std::clamp(intensity, 0.f, 1.f);
-
-    const float depth = pressed ? 0.115f : 0.17f;
-
-    place(face_, 0.18f, depth);
-
-    const auto brightness = static_cast<std::uint8_t>(
-        60.f + 105.f * level
-    );
-
-    face_.setFillColor(
-        sf::Color(brightness, brightness, brightness - 8)
-    );
+    const int level = static_cast<int>(std::clamp(intensity,0.f,1.f)*100.f+0.5f);
+    if (pressed_ == pressed && light_ == level) return;
+    pressed_=pressed;
+    light_=level;
+    cap_.clear();
+    const sf::Vector2f size = texture_ ? sf::Vector2f(texture_->getSize()) : sf::Vector2f{1,1};
+    const float depth = pressed ? 0.139f : 0.225f;
+    const sf::Color resin(static_cast<std::uint8_t>(142 + level),
+                          static_cast<std::uint8_t>(131 + level),
+                          static_cast<std::uint8_t>(116 + level));
+    const sf::Color edge(92,78,64);
+    auto v = [&](sf::Vector2f uv, float z, sf::Color tint) -> sf::Vertex {
+        return {project(uv,z),tint,{uv.x*size.x,uv.y*size.y}};
+    };
+    for (int i=0; i<segments; ++i)
+    {
+        const auto a=centre+direction(i)*radius, b=centre+direction(i+1)*radius;
+        quad(cap_,v(a,0.13f,edge),v(b,0.13f,edge),v(b,depth,edge),v(a,depth,edge));
+    }
+    for (int i=0; i<segments; ++i)
+    {
+        cap_.append(v(centre,depth+0.035f,resin));
+        cap_.append(v(centre+direction(i)*radius,depth,resin));
+        cap_.append(v(centre+direction(i+1)*radius,depth,resin));
+    }
 }
 
 bool LightButton::contains(sf::Vector2f position) const
 {
-    bool positive = false;
-    bool negative = false;
-
-    for (std::size_t i = 0; i < corners_.size(); ++i)
+    bool positive=false, negative=false;
+    for (unsigned i=0; i<4; ++i)
     {
-        const auto a = corners_[i];
-        const auto b = corners_[(i + 1u) % corners_.size()];
-
-        const auto edge = b - a;
-        const auto offset = position - a;
-
-        const float cross =
-            edge.x * offset.y - edge.y * offset.x;
-
-        positive = positive || cross > 0.f;
-        negative = negative || cross < 0.f;
+        const auto edge=corners_[(i+1)%4]-corners_[i];
+        const auto delta=position-corners_[i];
+        const float cross=edge.x*delta.y-edge.y*delta.x;
+        positive |= cross>0.f;
+        negative |= cross<0.f;
     }
-
     return !(positive && negative);
 }
 
 void LightButton::render(sf::RenderTarget& target) const
 {
-    target.draw(shadow_);
-    target.draw(sideFace_);
-
     sf::RenderStates states;
-    states.texture = &background_;
-
-    target.draw(housing_, states);
-    target.draw(rim_);
-    target.draw(face_);
+    states.texture=texture_;
+    target.draw(base_,states);
+    target.draw(cap_,states);
 }

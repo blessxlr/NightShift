@@ -56,6 +56,12 @@ void OfficeMonitor::update(sf::Time elapsed)
     redraw();
 }
 
+void OfficeMonitor::turnOff()
+{
+    surface_.clear(sf::Color::Black);
+    surface_.display();
+}
+
 void OfficeMonitor::redraw()
 {
     surface_.setView(surface_.getDefaultView());

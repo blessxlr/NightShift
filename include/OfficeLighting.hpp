@@ -22,6 +22,8 @@ public:
 	void renderRoom(sf::RenderTarget& target,const sf::Sprite& room) const;
 
 	void setCorridorLights(float left, float right);
+	
+	void setBlackout(bool enabled);
 
 private:
     sf::Texture warmTexture_;

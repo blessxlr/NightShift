@@ -9,6 +9,7 @@
 #include "SwitchSound.hpp"
 #include "NightCompleteScreen.hpp"
 #include "NightCompleteScreen.hpp"
+#include "SaveGame.hpp"
 
 #include <SFML/Graphics/Font.hpp>
 #include <SFML/Graphics/Texture.hpp>
@@ -46,6 +47,7 @@ private:
     sf::Texture keyboardTexture_;
     MenuMusic menuMusic_;
     SwitchSound switchSound_;
+    SaveGame saveGame_;
 
     MainMenu mainMenu_;
     ControlsScreen controlsScreen_;
@@ -53,8 +55,11 @@ private:
     OfficeScreen officeScreen_;
     NightCompleteScreen nightCompleteScreen_;
 	unsigned currentNight_ = 1u;
+	unsigned completedNights_ = 0u;
 
     Screen currentScreen_ = Screen::MainMenu;
     
     void update(sf::Time elapsed);
+    void saveProgress();
+	void completeNight();
 };

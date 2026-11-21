@@ -9,17 +9,20 @@
 #include <SFML/Window/VideoMode.hpp>
 #include <SFML/System/Clock.hpp>
 
+#include <algorithm>
+
 Application::Application()
     : window_(sf::VideoMode({1920u, 1080u}), "NightShift"),
       menuFont_("assets/fonts/menu.ttf"),
       keyboardTexture_("assets/images/keyboard-controls.png"),
       menuMusic_("assets/audio/menu-ambience.mp3"),
       switchSound_("assets/audio/night-start.wav"),
+      saveGame_("saves/progress.txt"),
       mainMenu_(menuFont_),
       nightCompleteScreen_(menuFont_),
       controlsScreen_(menuFont_, keyboardTexture_),
       nightIntroScreen_(menuFont_, switchSound_),
-      officeScreen_(menuFont_)
+      officeScreen_(menuFont_, switchSound_)
 {
     window_.setFramerateLimit(60);
 
@@ -30,6 +33,13 @@ Application::Application()
     keyboardTexture_.setSmooth(true);
     
     window_.setKeyRepeatEnabled(false);
+    
+    const GameProgress progress = saveGame_.load();
+
+	currentNight_ = progress.currentNight;
+	completedNights_ = progress.completedNights;
+
+	mainMenu_.setNight(currentNight_);
 }
 
 void Application::run()
@@ -82,10 +92,12 @@ void Application::update(sf::Time elapsed)
     else if (currentScreen_ == Screen::Office)
 	{
 		officeScreen_.update(elapsed);
-	
+
 		if (officeScreen_.hasFinishedNight())
 		{
 			officeScreen_.stopForNightCompletion();
+
+			completeNight();
 
 			nightCompleteScreen_.start();
 			currentScreen_ = Screen::NightComplete;
@@ -93,14 +105,32 @@ void Application::update(sf::Time elapsed)
 	}
 	else if (currentScreen_ == Screen::NightComplete)
 	{
+		if (!window_.hasFocus())
+		{
+			return;
+		}
+
 		nightCompleteScreen_.update(elapsed);
-	
+
 		if (nightCompleteScreen_.isFinished())
 		{
-			++currentNight_;
-	
-			nightIntroScreen_.start(currentNight_, false);
-			currentScreen_ = Screen::NightIntro;
+			constexpr unsigned mainNightCount = 5u;
+
+			if (completedNights_ >= mainNightCount)
+			{
+				mainMenu_.resetHover();
+				currentScreen_ = Screen::MainMenu;
+				menuMusic_.play();
+			}
+			else
+			{
+				nightIntroScreen_.start(
+					currentNight_,
+					false
+				);
+
+				currentScreen_ = Screen::NightIntro;
+			}
 		}
 	}
 }
@@ -111,14 +141,21 @@ void Application::handleMenuAction(MenuAction action)
     {
         case MenuAction::NewGame:
 			menuMusic_.stop();
+
 			currentNight_ = 1u;
+			completedNights_ = 0u;
+
+			mainMenu_.setNight(currentNight_);
+			saveProgress();
+
 			nightIntroScreen_.start(currentNight_, true);
 			currentScreen_ = Screen::NightIntro;
 			break;
 
 		case MenuAction::Continue:
 			menuMusic_.stop();
-			nightIntroScreen_.start(1u, false);
+
+			nightIntroScreen_.start(currentNight_, false);
 			currentScreen_ = Screen::NightIntro;
 			break;
 			
@@ -164,11 +201,13 @@ void Application::processEvents()
 		{
 			menuMusic_.pause();
 			switchSound_.pause();
+			nightCompleteScreen_.pause();
 		}
 		else if (event->is<sf::Event::FocusGained>())
 		{
 			menuMusic_.resume();
 			switchSound_.resume();
+			nightCompleteScreen_.resume();
 		}
 
         const auto action = handleScreenEvent(*event);
@@ -205,8 +244,9 @@ void Application::render()
             break;
             
          case Screen::NightComplete:
-			nightCompleteScreen_.render(window_);
-			break;   
+		officeScreen_.render(window_);
+		nightCompleteScreen_.render(window_);
+		break;  
     }
 
     window_.display();
@@ -231,4 +271,36 @@ MenuAction Application::handleScreenEvent(const sf::Event& event)
     }
 
     return MenuAction::None;
+}
+
+void Application::saveProgress()
+{
+    const GameProgress progress{
+        currentNight_,
+        completedNights_
+    };
+
+    if (!saveGame_.save(progress))
+    {
+        std::cerr
+            << "Failed to save game progress\n";
+    }
+}
+
+void Application::completeNight()
+{
+    completedNights_ = std::max(
+        completedNights_,
+        currentNight_
+    );
+
+    constexpr unsigned mainNightCount = 5u;
+
+    if (currentNight_ < mainNightCount)
+    {
+        ++currentNight_;
+    }
+
+    mainMenu_.setNight(currentNight_);
+    saveProgress();
 }
