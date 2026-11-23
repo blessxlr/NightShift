@@ -7,7 +7,7 @@ class FedorMovement
 {
 public:
     void reset(const BuildingMap& map, unsigned night);
-    void update(float seconds);
+    void update(float seconds, bool leftDoorClosed);
     std::optional<BuildingMap::Point> position() const;
 
 private:
@@ -20,4 +20,10 @@ private:
     unsigned activity_ = 0u;
     bool moving_ = false;
     std::mt19937 random_{std::random_device{}()};
+    
+    void waitAtDoor(float seconds, bool leftDoorClosed);
+
+	unsigned night_ = 1u;
+	bool routeReachesDoor_ = false;
+	float doorWaitRemaining_ = 0.f;
 };

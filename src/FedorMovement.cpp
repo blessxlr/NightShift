@@ -13,6 +13,10 @@ constexpr std::array<unsigned, 5> activityByNight{0u, 0u, 6u, 11u, 16u};
 
 void FedorMovement::reset(const BuildingMap& map, unsigned night)
 {
+	night_ = night;
+	routeReachesDoor_ = false;
+	doorWaitRemaining_ = 0.f;
+	
     legs_.clear();
     position_.reset();
     nextLeg_ = 0;
@@ -40,6 +44,9 @@ void FedorMovement::reset(const BuildingMap& map, unsigned night)
         const auto goal = map.navigationPoints.find(name);
         if (goal == map.navigationPoints.end())
             break;
+            
+        if (goal->first == "left_door")
+		routeReachesDoor_ = true;
 
         auto leg = findApproachRoute(map, from, goal->second);
         if (leg.empty())
@@ -52,11 +59,17 @@ void FedorMovement::reset(const BuildingMap& map, unsigned night)
     }
 }
 
-void FedorMovement::update(float seconds)
+void FedorMovement::update(float seconds, bool leftDoorClosed)
 {
-    if (!(seconds > 0.f) || nextLeg_ >= legs_.size())
+    if (!(seconds > 0.f) || legs_.empty())
         return;
 
+    if (nextLeg_ == legs_.size())
+    {
+        waitAtDoor(seconds, leftDoorClosed);
+        return;
+    }
+    
     if (!moving_)
     {
         checkRemaining_ -= seconds;
@@ -98,10 +111,35 @@ void FedorMovement::update(float seconds)
     if (nextPoint_ == route.size())
 	{
 		++nextLeg_;
+		if (routeReachesDoor_ && nextLeg_ == legs_.size())
+		doorWaitRemaining_ = 6.f - 0.25f * activity_;
 		nextPoint_ = 1;
 		moving_ = false;
 		checkRemaining_ = checkInterval;
 	}
+}
+
+void FedorMovement::waitAtDoor(float seconds, bool leftDoorClosed)
+{
+    if (!routeReachesDoor_ || doorWaitRemaining_ <= 0.f)
+        return;
+
+    doorWaitRemaining_ = std::max(0.f, doorWaitRemaining_ - seconds);
+    if (doorWaitRemaining_ > 0.f || !leftDoorClosed)
+        return;
+
+    std::size_t restartLeg = 0;
+    if (night_ == 5u)
+    {
+        std::uniform_int_distribution<std::size_t> retreat(2u, 3u);
+        restartLeg = legs_.size() - std::min(legs_.size(), retreat(random_));
+    }
+
+    position_ = legs_[restartLeg].front();
+    nextLeg_ = restartLeg;
+    nextPoint_ = 1;
+    moving_ = false;
+    checkRemaining_ = checkInterval;
 }
 
 std::optional<BuildingMap::Point> FedorMovement::position() const

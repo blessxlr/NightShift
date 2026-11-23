@@ -354,9 +354,6 @@ void OfficeScreen::update(sf::Time elapsed)
 	}
 
 	cameraMonitor_.update(elapsed);
-	
-	fedor_.update(elapsed.asSeconds());
-	cameraMonitor_.setFedorPosition(fedor_.position());
 
 	const bool leftRequested = leftLightKeyHeld_ || leftLightMouseHeld_;
 
@@ -422,6 +419,8 @@ void OfficeScreen::update(sf::Time elapsed)
 
 	leftDoor_.update(elapsed);
 	rightDoor_.update(elapsed);
+	fedor_.update(elapsed.asSeconds(), leftDoor_.isClosed());
+	cameraMonitor_.setFedorPosition(fedor_.position());
 
 	if (leftDoor_.closedAmount() != previousLeft ||
 		rightDoor_.closedAmount() != previousRight)
