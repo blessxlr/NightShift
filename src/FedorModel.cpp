@@ -30,7 +30,8 @@ V rotateX(V p,float c,float s) { return {p.x,p.y*c-p.z*s,p.y*s+p.z*c}; }
 V rotateY(V p,float c,float s) { return {p.x*c+p.z*s,p.y,p.z*c-p.x*s}; }
 
 enum Part { core, head, jaw, leftArm, rightArm, leftLeg, rightLeg, leftShin, rightShin, leftEar, rightEar };
-struct Material { V base; float metal, corrosion, emission; };
+enum class ConceptSurface { None, Enamel, Snout, Patch, Glass, Cloth, TarnishedBrass };
+struct Material { V base; float metal, corrosion, emission; ConceptSurface surface = ConceptSurface::None; };
 constexpr Material shell{{73,78,77},0.89f,0.87f,0.f};
 constexpr Material plate{{99,107,106},0.85f,0.94f,0.f};
 constexpr Material muzzle{{111,105,92},0.64f,0.73f,0.f};
@@ -58,13 +59,132 @@ struct Mesh
     std::vector<Face> faces;
 };
 
+void addFoxyHead(Mesh& mesh, bool closeup)
+{
+    constexpr Material enamel{{138, 53, 30}, 0.79f, 0.39f, 0.f, ConceptSurface::Enamel};
+    constexpr Material copper{{166, 76, 44}, 0.83f, 0.41f, 0.f, ConceptSurface::Enamel};
+    constexpr Material sand{{169, 130, 88}, 0.65f, 0.35f, 0.f, ConceptSurface::Snout};
+    constexpr Material leather{{49, 39, 34}, 0.14f, 0.18f, 0.f, ConceptSurface::Patch};
+    constexpr Material lens{{136, 125, 102}, 0.95f, 0.02f, 0.18f, ConceptSurface::Glass};
+    struct Ring { V center; float width, thickness; };
+    const int sides = closeup ? 40 : 20;
+
+    const auto loft = [&](Part part, Material material, V lateral, V vertical,
+                          std::initializer_list<Ring> rings) {
+        const auto start = mesh.vertices.size();
+        const std::vector<Ring> sections(rings);
+        const auto onRing = [&](std::size_t j, float c, float s) {
+            const auto& ring = sections[j];
+            return ring.center + lateral * (c * ring.width) + vertical * (s * ring.thickness);
+        };
+        for (std::size_t j = 0; j < sections.size(); ++j)
+        {
+            for (int i = 0; i < sides; ++i)
+            {
+                const float theta = i * (2.f * pi / sides);
+                const float c = std::cos(theta), s = std::sin(theta);
+                const V tangent = lateral * (-s * sections[j].width) + vertical * (c * sections[j].thickness);
+                const V length = onRing(std::min(j + 1, sections.size() - 1), c, s) -
+                                 onRing(j ? j - 1 : j, c, s);
+                V normal = unit(cross(tangent, length));
+                if (dot(normal, lateral * c + vertical * s) < 0.f)
+                    normal = normal * -1.f;
+                mesh.vertices.push_back({{onRing(j, c, s), normal}, part});
+            }
+        }
+        const auto triangle = [&](std::size_t a, std::size_t b, std::size_t c) {
+            const auto& v = mesh.vertices;
+            if (dot(cross(v[b].surface.point - v[a].surface.point,
+                          v[c].surface.point - v[a].surface.point), v[a].surface.normal) < 0.f)
+                std::swap(b, c);
+            mesh.faces.push_back({a, b, c, material});
+        };
+        for (std::size_t j = 1; j < sections.size(); ++j)
+            for (int i = 0; i < sides; ++i)
+            {
+                const auto a = start + (j - 1) * sides + i;
+                const auto b = start + (j - 1) * sides + (i + 1) % sides;
+                triangle(a, b, a + sides);
+                triangle(b, b + sides, a + sides);
+            }
+    };
+    const V x{1,0,0}, y{0,1,0}, z{0,0,1};
+    loft(head, enamel, x, z, {{{0,7.43f,0},0.69f,0.61f},{{0,7.78f,0},1.13f,0.83f},
+        {{0,8.40f,-0.03f},1.23f,0.94f},{{0,8.90f,-0.04f},1.07f,0.84f},
+        {{0,9.17f,-0.03f},0.76f,0.60f},{{0,9.31f,-0.06f},0.02f,0.02f}});
+    for (float side : {-1.f, 1.f})
+    {
+        const Part ear = side < 0.f ? leftEar : rightEar;
+        const float tip = side < 0.f ? 10.69f : 10.58f;
+        loft(ear, copper, x, z, {{{side*0.76f,8.92f,-0.09f},0.26f,0.19f},
+            {{side*1.02f,9.40f,-0.11f},0.47f,0.25f},{{side*1.22f,9.83f,-0.17f},0.40f,0.19f},
+            {{side*1.45f,10.29f,-0.21f},0.22f,0.12f},{{side*1.64f,tip,-0.24f},0.012f,0.018f}});
+        loft(ear, leather, x, z, {{{side*0.96f,9.22f,0.10f},0.10f,0.045f},
+            {{side*1.09f,9.49f,0.09f},0.32f,0.078f},{{side*1.28f,9.90f,0.003f},0.26f,0.072f},
+            {{side*1.56f,tip-0.19f,-0.12f},0.012f,0.02f}});
+        for (int layer = 0; layer < 2; ++layer)
+        {
+            const float h = 7.64f + layer * 0.33f;
+            loft(head, layer ? copper : enamel, y,z, {{{side*0.88f,h,0.17f},0.24f,0.51f},
+                {{side*1.25f,h-0.09f,0.08f},0.23f,0.39f},
+                {{side*(1.70f-layer*0.18f),h+0.09f,-0.13f},0.02f,0.018f}});
+        }
+        for (int i = 0; i < 5; ++i)
+        {
+            const float depth = 0.75f + 0.25f*i;
+            const float offset = side*(0.54f - i*0.052f);
+            const float root = 7.78f - 0.033f * i;
+            const float tipY = root - (i == 3 ? 0.39f : 0.24f);
+            loft(head, tooth, x,z, {{{offset,root,depth},0.105f,0.11f},
+                {{offset,root-0.08f,depth},0.095f,0.10f},{{offset*0.94f,tipY,depth-0.05f},0.008f,0.008f}});
+            loft(jaw, tooth, x,z, {{{offset,7.10f,depth-0.11f},0.094f,0.09f},
+                {{offset*0.96f,7.25f+(i%3)*0.04f,depth-0.08f},0.009f,0.009f}});
+        }
+    }
+    loft(jaw, enamel, x,y, {{{0,7.19f,-0.16f},0.78f,0.39f},{{0,7.02f,0.49f},0.75f,0.27f},
+        {{0,6.96f,1.29f},0.56f,0.18f},{{0,7.01f,1.84f},0.31f,0.14f},{{0,7.06f,1.96f},0.02f,0.02f}});
+    loft(jaw, rubber, x,y, {{{0,7.13f,0.46f},0.56f,0.16f},{{0,7.1f,1.21f},0.49f,0.10f},
+        {{0,7.11f,1.83f},0.24f,0.05f},{{0,7.11f,1.90f},0.02f,0.01f}});
+    for (int i = 0; i < 4; ++i)
+    {
+        const float t = i/4.f;
+        const float radius = 0.71f - t*0.39f;
+        const float h = 8.03f - 0.22f*t;
+        const float depth = 0.70f + 1.48f*t;
+        loft(head, sand, x,y, {{{0,h,depth},radius*0.96f,radius*0.76f},
+            {{0,h,depth+0.04f},radius,radius*0.80f},
+            {{0,h-0.06f,depth+0.36f},radius-0.069f,(radius-0.075f)*0.80f},
+            {{0,h-0.06f,depth+0.38f},radius-0.080f,(radius-0.084f)*0.78f}});
+    }
+    loft(head, rubber, x,y, {{{0,7.84f,2.10f},0.36f,0.23f},{{0,7.85f,2.23f},0.40f,0.24f},
+        {{0,7.82f,2.36f},0.33f,0.17f},{{0,7.81f,2.41f},0.02f,0.02f}});
+    loft(head, dark, x,y, {{{0.57f,8.43f,0.55f},0.46f,0.45f},{{0.57f,8.43f,0.91f},0.44f,0.42f},
+        {{0.57f,8.43f,1.01f},0.36f,0.34f}});
+    loft(head, lens, x,y, {{{0.57f,8.43f,0.89f},0.32f,0.30f},{{0.57f,8.43f,1.06f},0.30f,0.28f},
+        {{0.57f,8.43f,1.19f},0.17f,0.16f},{{0.57f,8.43f,1.22f},0.01f,0.01f}});
+    loft(head, leather, x,y, {{{-0.54f,8.48f,0.70f},0.55f,0.43f},{{-0.54f,8.47f,0.94f},0.52f,0.41f},
+        {{-0.54f,8.45f,1.06f},0.43f,0.32f},{{-0.54f,8.45f,1.10f},0.01f,0.01f}});
+    for (int tuft = -1; tuft <= 1; ++tuft)
+        loft(head, copper, x,z, {{{tuft*0.15f,9.25f,0.05f},0.071f,0.081f},
+            {{tuft*0.22f,9.50f,-0.02f},0.049f,0.055f},{{tuft*0.34f,9.66f+(tuft==0?0.13f:0.f),-0.12f},0.008f,0.008f}});
+}
+
 Mesh makeAnimatronic(bool closeup, AnimatronicKind kind)
 {
     Mesh mesh;
     const bool rabbit = kind == AnimatronicKind::Bonny;
     const bool hen = kind == AnimatronicKind::Chica;
-    const Material bodyShell = hen ? henShell : rabbit ? rabbitShell : shell;
-    const Material armor = hen ? henArmor : rabbit ? rabbitArmor : plate;
+    const bool fox = kind == AnimatronicKind::Foxy;
+    const bool golden = kind == AnimatronicKind::GoldenFedor;
+    constexpr Material foxShell{{140,53,31},0.83f,0.40f,0.f, ConceptSurface::Enamel};
+    constexpr Material foxArmor{{165,73,45},0.80f,0.42f,0.f, ConceptSurface::Enamel};
+    constexpr Material brass{{143,111,54},0.84f,0.64f,0.f,ConceptSurface::TarnishedBrass};
+    constexpr Material wornBrass{{162,124,65},0.80f,0.60f,0.f,ConceptSurface::TarnishedBrass};
+    const Material& shellMaterial = golden ? brass : shell;
+    const Material& plateMaterial = golden ? wornBrass : plate;
+    const Material& muzzleMaterial = golden ? wornBrass : muzzle;
+    const Material bodyShell = fox ? foxShell : hen ? henShell : rabbit ? rabbitShell : shellMaterial;
+    const Material armor = fox ? foxArmor : hen ? henArmor : rabbit ? rabbitArmor : plateMaterial;
     const auto solid = [&](Part part, V at, V size, Material color, float roundness = 0.85f,
                            float tilt = 0.f) {
         const bool detail = std::max({size.x, size.y, size.z}) < 0.29f;
@@ -139,46 +259,109 @@ Mesh makeAnimatronic(bool closeup, AnimatronicKind kind)
         solid(arm,{x,4.79f,-0.02f},{0.38f,0.34f,0.36f},dark);
         solid(arm,{x,4.81f,0.31f},{0.24f,0.23f,0.11f},steel,0.80f);
         solid(arm,{x,4.11f,0.09f},{0.47f,0.63f,0.48f},armor,0.52f,-side * 0.15f);
-        solid(arm,{x+side*0.12f,4.08f,0.46f},{0.22f,0.48f,0.14f},shell,0.52f,-side * 0.16f);
+        solid(arm,{x+side*0.12f,4.08f,0.46f},{0.22f,0.48f,0.14f},shellMaterial,0.52f,-side * 0.16f);
         bolt(arm,{x - side*0.20f,4.35f,0.53f},0.068f);
         bolt(arm,{x + side*0.27f,3.88f,0.51f},0.060f);
         bolt(arm,{side*2.18f,6.37f,0.69f},0.083f);
         solid(arm,{x,3.48f,0.14f},{0.29f,0.22f,0.29f},dark,0.60f);
-        solid(arm,{x,3.26f,0.20f},{0.42f,0.36f,0.35f},shell,0.68f,-side * 0.12f);
-        solid(arm,{x-side*0.36f,3.19f,0.37f},{0.16f,0.29f,0.15f},plate,0.72f,side * 0.27f);
+        solid(arm,{x,3.26f,0.20f},{0.42f,0.36f,0.35f},shellMaterial,0.68f,-side * 0.12f);
+        solid(arm,{x-side*0.36f,3.19f,0.37f},{0.16f,0.29f,0.15f},plateMaterial,0.72f,side * 0.27f);
         for (int finger = 0; finger < 4; ++finger)
         {
             const float digit = x + (finger - 1.5f) * 0.19f;
             const float end = 2.89f + 0.05f * std::abs(finger - 1);
-            solid(arm,{digit,end + 0.08f,0.25f},{0.091f,0.24f,0.16f},plate,0.54f);
+            solid(arm,{digit,end + 0.08f,0.25f},{0.091f,0.24f,0.16f},plateMaterial,0.54f);
             solid(arm,{digit,end-0.16f,0.30f},{0.087f,0.14f,0.16f},steel,0.64f);
         }
         solid(leg,{hip,3.47f,0},{0.66f,0.94f,0.63f},bodyShell,0.67f);
         solid(leg,{hip,3.45f,0.48f},{0.45f,0.61f,0.19f},armor,0.56f);
         solid(shin,{hip,2.37f,0},{0.45f,0.39f,0.44f},steel);
-        solid(shin,{hip,2.37f,0.36f},{0.41f,0.29f,0.20f},plate,0.60f);
+        solid(shin,{hip,2.37f,0.36f},{0.41f,0.29f,0.20f},plateMaterial,0.60f);
         solid(shin,{hip,1.42f,0.02f},{0.54f,0.84f,0.49f},bodyShell,0.50f);
         solid(shin,{hip,1.43f,0.44f},{0.34f,0.63f,0.13f},armor,0.55f,side * 0.10f);
         bolt(shin,{hip + side*0.17f,1.79f,0.57f},0.079f);
         bolt(shin,{hip - side*0.17f,1.08f,0.55f},0.064f);
         solid(shin,{hip,0.60f,0.09f},{0.35f,0.28f,0.37f},steel);
-        solid(shin,{hip,0.33f,0.36f},{0.69f,0.32f,0.85f},hen ? henArmor : plate,0.58f);
+        solid(shin,{hip,0.33f,0.36f},{0.69f,0.32f,0.85f},hen ? henArmor : plateMaterial,0.58f);
         for(int toe=-1;toe<=1;++toe)
             solid(shin,{hip+toe*0.33f,0.24f,0.96f},{0.17f,0.21f,hen ? 0.43f : 0.31f},
-                  hen ? henBeak : muzzle,0.67f);
-        if (kind == AnimatronicKind::Fedor)
+                  hen ? henBeak : muzzleMaterial,0.67f);
+        if (kind == AnimatronicKind::Fedor || golden)
         {
             const float earY = side < 0.f ? 8.96f : 9.21f;
             solid(head,{side*1.31f,earY - 0.23f,-0.11f},{0.24f,0.45f,0.22f},steel,0.68f,side * -0.31f);
-            solid(head,{side*1.47f,earY,-0.09f},{0.44f,0.39f,0.27f},plate,0.66f,side * -0.41f);
+            solid(head,{side*1.47f,earY,-0.09f},{0.44f,0.39f,0.27f},plateMaterial,0.66f,side * -0.41f);
             solid(head,{side*1.49f,earY,0.13f},{0.31f,0.27f,0.10f},dark,0.77f,side * -0.41f);
-            solid(head,{side*1.02f,7.66f,0.24f},{0.41f,0.46f,0.49f},shell,0.75f,side * 0.29f);
+            solid(head,{side*1.02f,7.66f,0.24f},{0.41f,0.46f,0.49f},shellMaterial,0.75f,side * 0.29f);
         }
         solid(jaw,{side*1.05f,7.20f,0.41f},{0.18f,0.38f,0.28f},steel,0.85f,side * 0.25f);
         solid(jaw,{side*1.13f,7.24f,0.53f},{0.17f,0.16f,0.09f},dark);
         for (const auto fastener : {V{side*0.94f,5.92f,1.02f}, V{side*1.20f,5.64f,0.98f},
                                 V{side*0.91f,4.91f,0.91f}})
             bolt(core,fastener,0.070f);
+    }
+    if (fox)
+    {
+        for (auto& vertex : mesh.vertices)
+        {
+            const float waist = std::clamp(std::abs(vertex.surface.point.y - 4.2f), 0.f, 1.f);
+            const float factor = 0.68f + 0.18f * waist;
+            vertex.surface.point.x *= factor;
+            vertex.surface.normal.x /= factor;
+            vertex.surface.normal = unit(vertex.surface.normal);
+        }
+        addFoxyHead(mesh, closeup);
+        constexpr Material fabric{{83,43,31},0.08f,0.11f,0.f,ConceptSurface::Cloth};
+        const auto collarStart = mesh.vertices.size();
+        constexpr int pleats = 58;
+        for (int row = 0; row < 4; ++row)
+            for (int i = 0; i < pleats; ++i)
+            {
+                const float a = 2.f*pi*i/pleats;
+                const float fold = 0.065f*std::sin(8.f*a) + 0.035f*std::cos(15.f*a);
+                const float spread = row / 3.f;
+                const float hem = row == 3 ? 0.35f*std::abs(std::sin(i*1.48f)) : 0.f;
+                const float sag = (0.38f + 0.32f*std::cos(a-0.5f))*spread;
+                const V v{(0.63f+spread*0.78f+fold)*std::cos(a),
+                          6.99f-spread*0.56f-sag-hem,
+                          (0.56f+spread*0.52f+fold)*std::sin(a)};
+                mesh.vertices.push_back({{v,unit({std::cos(a),0.48f,std::sin(a)})},core});
+            }
+        for (int row=0;row<3;++row)
+            for (int i=0;i<pleats;++i)
+            {
+                const auto a=collarStart+row*pleats+i, b=collarStart+row*pleats+(i+1)%pleats;
+                mesh.faces.push_back({a,b,a+pleats,fabric});
+                mesh.faces.push_back({b,b+pleats,a+pleats,fabric});
+            }
+        solid(head,{0,7.42f,0.44f},{0.65f,0.44f,0.44f},rubber,0.8f);
+        solid(jaw,{0,7.08f,1.12f},{0.47f,0.12f,0.63f},rubber,0.74f);
+        constexpr Material strap{{48,37,31},0.18f,0.11f,0.f,ConceptSurface::Patch};
+        for (int i = 0; i < 28; ++i)
+        {
+            const float t = i / 27.f;
+            const float a = -0.48f + 2.60f*t;
+            const float h = 8.55f + 0.65f*std::sin(t*pi);
+            const float crown = 1.f - 0.24f*std::sin(t*pi);
+            solid(head,{1.23f*crown*std::sin(a),h,0.96f*crown*std::cos(a)},
+                  {0.113f,0.081f,0.10f},strap,0.81f,0.33f);
+        }
+        solid(head,{0.63f,8.86f,0.79f},{0.38f,0.10f,0.12f},foxArmor,0.70f,-0.16f);
+        solid(head,{0.59f,8.67f,0.91f},{0.38f,0.105f,0.13f},foxShell,0.8f,-0.16f);
+        solid(head,{0.59f,8.18f,0.90f},{0.33f,0.075f,0.10f},rubber,0.82f,-0.03f);
+        solid(head,{0.03f,8.97f,0.72f},{0.032f,0.29f,0.033f},dark,0.7f,-0.32f);
+        solid(head,{-0.99f,8.43f,0.36f},{0.41f,0.092f,0.23f},rubber,0.7f,-0.12f);
+        for (float side : {-1.f,1.f})
+        {
+            bolt(head,{side*0.99f,8.33f,0.70f},0.057f);
+            bolt(head,{side*0.80f,8.97f,0.54f},0.046f);
+            bolt(head,{side*0.77f,9.24f,0.17f},0.078f);
+            solid(head,{side*0.20f,7.84f,2.36f},{0.088f,0.052f,0.025f},rubber);
+            for (int pore=0; pore<3; ++pore)
+                solid(head,{side*(0.34f+pore*0.056f),7.89f+(pore%2)*0.07f,2.1f-pore*0.19f},
+                      {0.028f,0.035f,0.027f},dark);
+        }
+        return mesh;
     }
     if (hen)
     {
@@ -253,25 +436,33 @@ Mesh makeAnimatronic(bool closeup, AnimatronicKind kind)
             solid(core,{0.40f,5.78f - 0.17f * slot,1.10f},{0.31f,0.035f,0.020f},dark,0.63f,-0.08f);
         return mesh;
     }
-    solid(head,{0.01f,8.16f,-0.01f},{1.33f,1.04f,1.03f},shell,0.86f);
-    solid(head,{-0.46f,8.72f,0.57f},{0.75f,0.43f,0.41f},plate,0.78f,-0.14f);
-    solid(head,{0.56f,8.69f,0.53f},{0.69f,0.44f,0.38f},shell,0.81f,0.07f);
+    solid(head,{0.01f,8.16f,-0.01f},{1.33f,1.04f,1.03f},shellMaterial,0.86f);
+    solid(head,{-0.46f,8.72f,0.57f},{0.75f,0.43f,0.41f},plateMaterial,0.78f,-0.14f);
+    solid(head,{0.56f,8.69f,0.53f},{0.69f,0.44f,0.38f},shellMaterial,0.81f,0.07f);
     solid(head,{-0.14f,8.81f,0.93f},{0.028f,0.26f,0.025f},dark,0.57f,0.39f);
     solid(head,{-0.23f,8.99f,0.87f},{0.024f,0.16f,0.045f},dark,0.59f,-0.32f);
-    solid(head,{0,7.73f,1.03f},{0.89f,0.30f,0.48f},muzzle,0.63f,0.034f);
+    solid(head,{0,7.73f,1.03f},{0.89f,0.30f,0.48f},muzzleMaterial,0.63f,0.034f);
     for(float side : {-1.f,1.f})
     {
         solid(head,{side*0.56f,8.20f,0.78f},{0.42f,0.35f,0.25f},dark,0.79f,side * 0.19f);
         solid(head,{side*0.57f,8.18f,0.86f},{0.31f,0.27f,0.25f},rubber,0.87f,side * 0.14f);
-        solid(head,{side*0.62f,8.53f,0.78f},{0.49f,0.14f,0.19f},plate,0.60f,side * 0.28f);
+        solid(head,{side*0.62f,8.53f,0.78f},{0.49f,0.14f,0.19f},plateMaterial,0.60f,side * 0.28f);
         bolt(head,{side*0.97f,8.53f,0.94f},0.058f);
         solid(head,{side*0.60f,7.74f,1.46f},{0.052f,0.048f,0.033f},dark);
         solid(head,{side*0.47f,7.60f,1.48f},{0.064f,0.040f,0.032f},dark);
     }
-    solid(head,{0.54f,8.19f,1.02f},{0.214f,0.212f,0.17f},steel);
-    solid(head,{0.55f,8.19f,1.156f},{0.132f,0.138f,0.075f},eye);
-    solid(head,{0.562f,8.196f,1.229f},{0.045f,0.046f,0.011f},dark);
-    solid(head,{0.59f,8.237f,1.220f},{0.034f,0.028f,0.019f},tooth);
+    if (!golden)
+    {
+        solid(head,{0.54f,8.19f,1.02f},{0.214f,0.212f,0.17f},steel);
+        solid(head,{0.55f,8.19f,1.156f},{0.132f,0.138f,0.075f},eye);
+        solid(head,{0.562f,8.196f,1.229f},{0.045f,0.046f,0.011f},dark);
+        solid(head,{0.59f,8.237f,1.220f},{0.034f,0.028f,0.019f},tooth);
+    }
+    else
+    {
+        solid(head,{0.57f,8.18f,1.059f},{0.20f,0.14f,0.105f},rubber);
+        solid(head,{0.61f,8.18f,1.165f},{0.029f,0.023f,0.014f},eye);
+    }
     solid(head,{-0.62f,8.09f,1.13f},{0.051f,0.14f,0.034f},wire,0.72f,-0.46f);
     solid(head,{-0.72f,8.14f,1.08f},{0.027f,0.16f,0.040f},steel,0.71f,0.76f);
     solid(head,{0,7.94f,1.38f},{0.28f,0.13f,0.24f},dark,0.62f,-0.035f);
@@ -279,7 +470,7 @@ Mesh makeAnimatronic(bool closeup, AnimatronicKind kind)
     solid(head,{0,7.31f,0.65f},{0.85f,0.23f,0.34f},rubber,0.76f);
     solid(head,{0,7.05f,0.37f},{0.35f,0.42f,0.28f},dark,0.79f);
     solid(head,{-0.64f,7.19f,0.70f},{0.084f,0.37f,0.091f},wire,0.64f,-0.31f);
-    solid(jaw,{0,7.02f,0.81f},{1.03f,0.25f,0.60f},shell,0.74f,-0.027f);
+    solid(jaw,{0,7.02f,0.81f},{1.03f,0.25f,0.60f},shellMaterial,0.74f,-0.027f);
     solid(jaw,{0,7.15f,1.07f},{0.79f,0.14f,0.41f},dark,0.65f);
     for (int d = -3; d <= 3; ++d)
     {
@@ -419,6 +610,57 @@ private:
     std::vector<sf::Color> texels_;
 };
 
+class ConceptFinish
+{
+public:
+    ConceptFinish()
+    {
+        if (art_.loadFromFile("assets/images/animatronics-lineup.png") &&
+            art_.getSize() == sf::Vector2u{2172,724})
+            pixels_ = art_.getPixelsPtr();
+    }
+
+    V sample(ConceptSurface layer, V p, V base) const
+    {
+        if (!pixels_)
+            return base;
+        const auto tile = [](float n) { return 1.f - std::abs(2.f*(n-std::floor(n))-1.f); };
+        const float u = tile(0.61f*p.x + 0.37f*p.z);
+        const float v = tile(0.47f*p.y + 0.22f*p.z);
+        float x = 1439.f + 74.f*u, y = 231.f + 43.f*v;
+        switch (layer)
+        {
+            case ConceptSurface::Glass:
+                x = 1586.f + 66.f*(p.x-0.57f);
+                y = 321.f - 67.f*(p.y-8.43f);
+                break;
+            case ConceptSurface::Patch:
+                x = 1446.f + 48.f*u; y = 292.f + 47.f*v;
+                break;
+            case ConceptSurface::Snout:
+                x = 1525.f - 55.f*(p.z-0.78f) + 64.f*p.x;
+                y = 371.f + 47.f*(p.z-0.78f) - 56.f*(p.y-8.03f);
+                break;
+            case ConceptSurface::Cloth:
+                x = 1584.f + 45.f*u; y = 609.f + 53.f*v;
+                break;
+            case ConceptSurface::TarnishedBrass:
+                x = 1968.f + 54.f*u; y = 149.f + 73.f*v;
+                break;
+            default: break;
+        }
+        const auto* texel = pixels_ + 4*(static_cast<int>(y)*2172 + static_cast<int>(x));
+        const V color{float(texel[0]),float(texel[1]),float(texel[2])};
+        if (layer == ConceptSurface::TarnishedBrass)
+            return V{color.x * 0.96f, color.y * 0.95f, color.z * 0.76f} + base * 0.29f;
+        return color * 1.22f + base * 0.21f;
+    }
+
+private:
+    sf::Image art_;
+    const std::uint8_t* pixels_ = nullptr;
+};
+
 V litMetal(const Material& material, V normal, const Finish& finish,
            const MetalTexture& texture, V position, V surfaceNormal)
 {
@@ -434,6 +676,11 @@ V litMetal(const Material& material, V normal, const Finish& finish,
         const V naturalTone = photo * 1.10f + V{8.f, 10.f, 12.f};
         albedo = albedo * (1.f - photoWeight) + naturalTone * photoWeight;
         rustAmount = 0.34f * rustAmount + 0.66f * oxidation;
+    }
+    if (material.surface != ConceptSurface::None)
+    {
+        static const ConceptFinish finishArt;
+        albedo = finishArt.sample(material.surface, position, albedo);
     }
     const float lambert = std::max(0.f, dot(normal, {-0.50f, 0.73f, 0.46f}));
     const float fill = std::max(0.f, dot(normal, {0.83f, 0.27f, -0.49f}));
@@ -452,7 +699,7 @@ V litMetal(const Material& material, V normal, const Finish& finish,
 
 void paintFace(const Vertex& first, const Vertex& second, const Vertex& third,
                const Vertex& surfaceA, const Vertex& surfaceB, const Vertex& surfaceC,
-               const Material& material, const MetalTexture& texture, int resolution, float gameplayScale,
+               const Material& material, const MetalTexture& texture, int resolution, float gameplayScale, float portraitOrigin,
                std::vector<float>& depth, std::vector<std::uint8_t>& pixels)
 {
     const V planeNormal = cross(second.point - first.point, third.point - first.point);
@@ -460,11 +707,12 @@ void paintFace(const Vertex& first, const Vertex& second, const Vertex& third,
         return;
     const int canvasWidth = width * resolution;
     const int canvasHeight = height * resolution;
-    const auto project = [resolution, gameplayScale](V p) {
-        if (resolution > 1)
+    const auto project = [resolution, gameplayScale, portraitOrigin](V p) {
+        if (resolution == 3)
             return V{(width / 2.f + p.x * scale * 1.26f) * resolution,
-                     (71.f - (p.y - 7.88f) * scale * 1.26f) * resolution, p.z};
-        return V{width / 2.f + p.x * gameplayScale, height - 4.f - p.y * gameplayScale, p.z};
+                     (portraitOrigin - (p.y - 7.88f) * scale * 1.26f) * resolution, p.z};
+        return V{(width / 2.f + p.x * gameplayScale) * resolution,
+                 (height - 4.f - p.y * gameplayScale) * resolution, p.z};
     };
     const V a = project(first.point);
     const V b = project(second.point);
@@ -541,9 +789,10 @@ void shadeRecesses(int resolution, const std::vector<float>& depth, std::vector<
 }
 
 FedorModel::FedorModel(bool closeup, AnimatronicKind kind)
-    : texture_({closeup ? 3u * width : width, closeup ? 3u * height : height}),
+    : texture_({width * (closeup ? 3u : kind == AnimatronicKind::GoldenFedor ? 2u : 1u),
+                height * (closeup ? 3u : kind == AnimatronicKind::GoldenFedor ? 2u : 1u)}),
       kind_(kind),
-      resolutionScale_(closeup ? 3 : 1),
+      resolutionScale_(static_cast<int>(texture_.getSize().x / width)),
       pixels_(width * height * resolutionScale_ * resolutionScale_ * 4),
       depth_(width * height * resolutionScale_ * resolutionScale_)
 {
@@ -556,8 +805,10 @@ const sf::Texture& FedorModel::render(FedorPose pose,float viewAngle,float attac
     const int phaseKey=static_cast<int>(std::round(pose.phase*12.f/pi));
     const int strideKey=static_cast<int>(std::round(pose.stride*10.f));
     const int attackKey=static_cast<int>(std::round(attack*24.f));
-    if(angleKey==lastAngle_ && phaseKey==lastPhase_ &&
+    const int restKey = static_cast<int>(std::round(std::clamp(pose.rest, 0.f, 1.f) * 24.f));
+    if(restKey==lastRest_ && angleKey==lastAngle_ && phaseKey==lastPhase_ &&
        strideKey==lastStride_ && attackKey==lastAttack_) return texture_;
+    lastRest_ = restKey;
     lastAngle_=angleKey; lastPhase_=phaseKey; lastStride_=strideKey; lastAttack_=attackKey;
     std::fill(pixels_.begin(),pixels_.end(),0);
     std::fill(depth_.begin(),depth_.end(),-std::numeric_limits<float>::infinity());
@@ -566,10 +817,40 @@ const sf::Texture& FedorModel::render(FedorPose pose,float viewAngle,float attac
     const float stride=strideKey/10.f, lunge=attackKey/24.f;
     const float swing=std::sin(phase)*stride;
     const float camCos=std::cos(angle), camSin=std::sin(angle);
-    const std::array<float,11> rotations{lunge*0.16f, swing*0.08f-lunge*0.20f,
+    const bool fox = kind_ == AnimatronicKind::Foxy;
+    const bool golden = kind_ == AnimatronicKind::GoldenFedor;
+    const float rest = restKey / 24.f;
+    std::array<float,11> rotations{lunge*0.16f, swing*0.08f-lunge*0.20f,
         swing*0.08f+lunge*0.77f, -swing*0.40f-lunge*0.78f, swing*0.40f-lunge*0.92f,
         swing*0.39f, -swing*0.39f, std::max(swing,0.f)*0.48f, std::max(-swing,0.f)*0.48f,
         swing*0.10f-lunge*0.19f, -swing*0.078f+lunge*0.13f};
+    if (fox)
+    {
+        rotations[head] -= 0.37f * rest;
+        rotations[jaw] -= 0.16f * (1.f - lunge);
+        rotations[leftArm] -= 0.98f * rest + 0.18f * stride;
+        rotations[rightArm] -= 0.86f * rest + 0.20f * stride;
+        rotations[leftLeg] -= 0.82f * rest;
+        rotations[rightLeg] -= 0.98f * rest;
+        rotations[leftShin] += 1.69f * rest;
+        rotations[rightShin] += 1.74f * rest;
+    }
+    if (golden)
+    {
+        rotations[head] += 0.18f;
+        rotations[jaw] += 0.19f;
+        rotations[leftEar] -= 0.22f;
+        rotations[rightEar] += 0.17f;
+        if (resolutionScale_ != 3)
+        {
+            rotations[leftArm] -= 0.68f;
+            rotations[rightArm] -= 0.77f;
+            rotations[leftLeg] = -1.48f;
+            rotations[rightLeg] = -1.32f;
+            rotations[leftShin] = -0.03f;
+            rotations[rightShin] = -0.14f;
+        }
+    }
     constexpr std::array<V,11> pivots{{{0,5,0},{0,7.18f,0.10f},{0,7.22f,0.26f},
         {-1.83f,6.02f,0},{1.83f,6.02f,0},{-0.84f,4.22f,0},{0.84f,4.22f,0},
         {-0.84f,2.37f,0},{0.84f,2.37f,0},{-0.63f,8.97f,0.02f},{0.63f,8.97f,0.02f}}};
@@ -583,6 +864,9 @@ const sf::Texture& FedorModel::render(FedorPose pose,float viewAngle,float attac
     const auto pivot=[&](V p,Part part) {
         return rotateX(p-pivots[part],cosine[part],sine[part])+pivots[part];
     };
+    const bool seated = golden && resolutionScale_ != 3;
+    const float bodyPitch = fox ? rest * 1.16f + stride * 0.16f : 0.f;
+    const float pitchCos = std::cos(bodyPitch), pitchSin = std::sin(bodyPitch);
     const auto transform = [&](Vertex vertex, Part part) {
         const auto articulate = [&](Part joint) {
             vertex.point = pivot(vertex.point, joint);
@@ -596,16 +880,47 @@ const sf::Texture& FedorModel::render(FedorPose pose,float viewAngle,float attac
         const bool ear = part == leftEar || part == rightEar;
         if (part == jaw || ear)
             articulate(head);
+        if (golden && (part == head || part == jaw || ear))
+        {
+            const V centre{0.f, 7.18f, 0.10f};
+            constexpr float rollCos = 0.969f;
+            constexpr float rollSin = -0.247f;
+            vertex.point = rotateZ(vertex.point - centre, rollCos, rollSin) + centre;
+            vertex.normal = rotateZ(vertex.normal, rollCos, rollSin);
+        }
         if (part <= rightArm || ear)
             vertex.point.y += bob;
-        return Vertex{rotateY(vertex.point, camCos, camSin), rotateY(vertex.normal, camCos, camSin)};
+        if (fox)
+        {
+            vertex.point = rotateX(vertex.point - V{0,4.2f,0}, pitchCos,pitchSin) + V{0,4.2f,0};
+            vertex.normal = rotateX(vertex.normal,pitchCos,pitchSin);
+            vertex.point.z -= 1.4f * rest;
+        }
+        vertex.point = rotateY(vertex.point, camCos, camSin);
+        vertex.normal = rotateY(vertex.normal, camCos, camSin);
+        if (seated)
+        {
+            vertex.point = rotateX(vertex.point, 0.947f, 0.321f);
+            vertex.normal = rotateX(vertex.normal, 0.947f, 0.321f);
+        }
+        return vertex;
     };
     const bool rabbit = kind_ == AnimatronicKind::Bonny;
     const bool hen = kind_ == AnimatronicKind::Chica;
     const auto& mesh = [&]() -> const Mesh& {
+        if (fox)
+        {
+            if (resolutionScale_ == 3)
+            {
+                static const auto closeFox = makeAnimatronic(true, AnimatronicKind::Foxy);
+                return closeFox;
+            }
+            static const auto foxMesh = makeAnimatronic(false, AnimatronicKind::Foxy);
+            return foxMesh;
+        }
         if (hen)
         {
-            if (resolutionScale_ > 1)
+            if (resolutionScale_ == 3)
             {
                 static const auto chicaCloseup = makeAnimatronic(true, AnimatronicKind::Chica);
                 return chicaCloseup;
@@ -613,9 +928,19 @@ const sf::Texture& FedorModel::render(FedorPose pose,float viewAngle,float attac
             static const auto chica = makeAnimatronic(false, AnimatronicKind::Chica);
             return chica;
         }
+        if (golden)
+        {
+            if (resolutionScale_ == 3)
+            {
+                static const auto closeGolden = makeAnimatronic(true, AnimatronicKind::GoldenFedor);
+                return closeGolden;
+            }
+            static const auto seatedGolden = makeAnimatronic(true, AnimatronicKind::GoldenFedor);
+            return seatedGolden;
+        }
         if (rabbit)
         {
-            if (resolutionScale_ > 1)
+            if (resolutionScale_ == 3)
             {
                 static const auto bonnyCloseup = makeAnimatronic(true, AnimatronicKind::Bonny);
                 return bonnyCloseup;
@@ -623,7 +948,7 @@ const sf::Texture& FedorModel::render(FedorPose pose,float viewAngle,float attac
             static const auto bonny = makeAnimatronic(false, AnimatronicKind::Bonny);
             return bonny;
         }
-        if (resolutionScale_ > 1)
+        if (resolutionScale_ == 3)
         {
             static const auto closeup = makeAnimatronic(true, AnimatronicKind::Fedor);
             return closeup;
@@ -636,12 +961,19 @@ const sf::Texture& FedorModel::render(FedorPose pose,float viewAngle,float attac
     for (const auto& vertex : mesh.vertices)
         posed.push_back(transform(vertex.surface, vertex.part));
 
+    if ((fox && resolutionScale_ == 1) || seated)
+    {
+        const auto floor = std::min_element(posed.begin(), posed.end(),
+            [](const Vertex& a, const Vertex& b) { return a.point.y < b.point.y; })->point.y;
+        for (auto& vertex : posed)
+            vertex.point.y -= floor;
+    }
     static const MetalTexture metal;
-    const float gameplayScale = rabbit ? scale * 0.86f : hen ? scale * 0.96f : scale;
+    const float gameplayScale = fox ? scale * (0.94f - 0.16f * rest) : rabbit ? scale * 0.86f : hen ? scale * 0.96f : scale;
     for (const auto& face : mesh.faces)
         paintFace(posed[face.a], posed[face.b], posed[face.c], mesh.vertices[face.a].surface,
                   mesh.vertices[face.b].surface, mesh.vertices[face.c].surface,
-                  face.paint, metal, resolutionScale_, gameplayScale, depth_, pixels_);
+                  face.paint, metal, resolutionScale_, gameplayScale, fox ? 103.f : 71.f, depth_, pixels_);
 
     shadeRecesses(resolutionScale_, depth_, pixels_);
     texture_.update(pixels_.data());

@@ -27,6 +27,13 @@ void PowerSystem::update(double nightProgress, unsigned activeDevices)
     usageLevel_ = remaining_ > 0.0 ? 1u + activeDevices : 0u;
 }
 
+void PowerSystem::consume(unsigned percentagePoints)
+{
+    remaining_ = std::max(0.0, remaining_ - percentagePoints);
+    if (!hasPower())
+        usageLevel_ = 0;
+}
+
 unsigned PowerSystem::percent() const
 {
     return static_cast<unsigned>(std::ceil(remaining_));

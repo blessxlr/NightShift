@@ -18,6 +18,9 @@
 #include "PowerSystem.hpp"
 #include "CameraMonitor.hpp"
 #include "FedorMovement.hpp"
+#include "FoxyMovement.hpp"
+#include "GoldenFedor.hpp"
+#include "BlackoutSequence.hpp"
 #include "SwitchSound.hpp"
 #include "TabletHandle.hpp"
 
@@ -55,6 +58,7 @@ private:
 	sf::Sprite roomImage_;
 	OfficeFan fan_;
 	FanSound fanSound_;
+    BlackoutSequence blackout_;
 	SwitchSound blackoutSound_{"assets/audio/power-cut.mp3"};
     OfficeLighting lighting_;
     sf::Texture doorTexture_;
@@ -77,6 +81,10 @@ private:
     CameraMonitor cameraMonitor_;
     AnimatronicMovement fedor_;
     AnimatronicMovement bonny_{AnimatronicKind::Bonny};
+    FoxyMovement foxy_;
+    GoldenFedor goldenFedor_;
+    mutable FedorModel goldenModel_{false, AnimatronicKind::GoldenFedor};
+    mutable FedorModel corridorFoxy_{false, AnimatronicKind::Foxy};
     AnimatronicMovement chica_{AnimatronicKind::Chica};
     mutable FedorModel corridorFedor_;
     mutable FedorModel corridorBonny_{false, AnimatronicKind::Bonny};
@@ -92,11 +100,14 @@ private:
     CorridorLight leftLight_;
 	CorridorLight rightLight_;
     void drawOffice(sf::RenderTarget& target) const;
-    void drawInCorridor(sf::RenderTarget& target, const AnimatronicMovement& actor,
+    void drawGoldenFedor(sf::RenderTarget& target) const;
+    template<class Actor>
+    void drawInCorridor(sf::RenderTarget& target, const Actor& actor,
                         FedorModel& model, bool rightSide = false) const;
     
     void clearLightInput();
     void beginBlackout();
+    void drawBlackoutFedor(sf::RenderTarget& target) const;
 
 	void refreshClock();
 	void refreshPowerHud();

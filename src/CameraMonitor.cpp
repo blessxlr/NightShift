@@ -332,7 +332,9 @@ void CameraMonitor::renderSelectedFeed(sf::RenderTarget& target) const
                                            "bonnyImage", "bonnyRect", "bonnyDepth");
         const bool chicaVisible = addActor(chicaPosition_, chicaPose_, chicaModel_,
                                            "chicaImage", "chicaRect", "chicaDepth");
-        if (fedorVisible || bonnyVisible || chicaVisible)
+        const bool foxyVisible = addActor(foxyPosition_, foxyPose_, foxyModel_,
+                                          "foxyImage", "foxyRect", "foxyDepth");
+        if (fedorVisible || bonnyVisible || chicaVisible || foxyVisible)
         {
             actorShader_.setUniform("sceneDepth", feed.depth);
             states.shader = &actorShader_;
@@ -350,6 +352,12 @@ void CameraMonitor::playSignalTransition()
         interferenceLeft_ = interferenceDuration_;
         switchSound_.play();
     }
+}
+
+bool CameraMonitor::isWatching(unsigned number) const
+{
+    return wantsOpen_ && progress_ >= 1.f && interferenceLeft_ <= 0.f &&
+           selectedFeed_ + 1u == number && feeds_[selectedFeed_].loaded;
 }
 
 void CameraMonitor::selectCamera(unsigned number)

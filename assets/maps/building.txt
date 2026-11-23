@@ -62,6 +62,9 @@ point chica_hall 99 143
 point chica_electrical 168 151
 point chica_right_approach 169 248
 point left_door 77 288
+point foxy_rest 231 178
+point foxy_ready 219 150
+point foxy_right_approach 169 239
 point right_door 164 288
 
 point light_stage 95 61

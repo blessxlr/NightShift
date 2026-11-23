@@ -32,15 +32,17 @@ private:
     static constexpr float scareDuration_ = 5.30f;
     static constexpr float stillDuration_ = 5.f;
 
-    std::array<sf::Texture, 3> stills_;
-    std::array<bool, 3> stillReady_{};
+    std::array<sf::Texture, 4> stills_;
+    std::array<bool, 4> stillReady_{};
     sf::Text label_;
     sf::SoundBuffer soundBuffer_;
     std::optional<sf::Sound> sound_;
-    mutable std::array<FedorModel, 3> models_{{
+    mutable std::array<FedorModel, 5> models_{{
         FedorModel(true, AnimatronicKind::Fedor),
         FedorModel(true, AnimatronicKind::Bonny),
-        FedorModel(true, AnimatronicKind::Chica)
+        FedorModel(true, AnimatronicKind::Chica),
+        FedorModel(true, AnimatronicKind::Foxy),
+        FedorModel(true, AnimatronicKind::GoldenFedor)
     }};
     AnimatronicKind attacker_ = AnimatronicKind::Fedor;
     float elapsed_ = 0.f;

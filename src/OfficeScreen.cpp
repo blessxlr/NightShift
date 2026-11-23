@@ -258,6 +258,7 @@ void OfficeScreen::handleEvent(const sf::Event& event, const sf::RenderTarget& t
     {
         hasFocus_ = false;
         blackoutSound_.pause();
+        blackout_.pause();
         officeAudio_.pause();
         nightTimer_.pause();
         camera_.stop();
@@ -275,6 +276,7 @@ void OfficeScreen::handleEvent(const sf::Event& event, const sf::RenderTarget& t
     {
         hasFocus_ = true;
         blackoutSound_.resume();
+        blackout_.resume();
         officeAudio_.resume();
         if (nightStarted_)
         {
@@ -383,7 +385,7 @@ void OfficeScreen::update(sf::Time elapsed)
 
 	power_.update(nightTimer_.progress(), activeDevices);
 
-	const bool powered = power_.hasPower();
+	bool powered = power_.hasPower();
 
 	if (previousPercent > 0u && !powered)
 	{
@@ -429,28 +431,56 @@ void OfficeScreen::update(sf::Time elapsed)
 	leftDoor_.update(elapsed);
 	rightDoor_.update(elapsed);
 
-    const bool leftClosed = powered && leftDoor_.isClosed();
-    const unsigned hour = nightTimer_.hour();
-    fedor_.update(elapsed.asSeconds(), leftClosed, hour, !bonny_.officeApproach());
-    bonny_.update(elapsed.asSeconds(), leftClosed, hour, !fedor_.officeApproach());
-    chica_.update(elapsed.asSeconds(), powered && rightDoor_.isClosed(), hour);
-    cameraMonitor_.setFedorPosition(fedor_.position(), fedor_.pose());
-    cameraMonitor_.setBonnyPosition(bonny_.position(), bonny_.pose());
-    cameraMonitor_.setChicaPosition(chica_.position(), chica_.pose());
-    if (fedor_.startedStep())
-        officeAudio_.playFedorMove();
-    if (bonny_.startedStep())
-        officeAudio_.playBonnyMove();
-    if (chica_.startedStep())
-        officeAudio_.playChicaMove();
-    if (chica_.startedKitchenVisit())
-        officeAudio_.playKitchenVisit();
-    if (fedor_.retreatedFromDoor() || bonny_.retreatedFromDoor())
-        officeAudio_.playDoorKnock();
-    if (chica_.retreatedFromDoor())
-        officeAudio_.playDoorKnock(true);
     if (powered)
-        officeAudio_.update(elapsed);
+    {
+        const bool leftClosed = leftDoor_.isClosed();
+        const unsigned hour = nightTimer_.hour();
+        fedor_.update(elapsed.asSeconds(), leftClosed, hour, !bonny_.officeApproach());
+        bonny_.update(elapsed.asSeconds(), leftClosed, hour, !fedor_.officeApproach());
+        const bool rightClosed = rightDoor_.isClosed();
+        chica_.update(elapsed.asSeconds(), rightClosed, hour, !foxy_.officeApproach());
+        foxy_.update(elapsed.asSeconds(), cameraMonitor_.isWatching(6u),
+                     rightClosed, !chica_.officeApproach());
+        if (foxy_.startedSprint())
+            officeAudio_.playFoxySprint();
+        if (foxy_.blockedCost() > 0)
+        {
+            power_.consume(foxy_.blockedCost());
+            powered = power_.hasPower();
+            refreshPowerHud();
+            if (!powered)
+                beginBlackout();
+        }
+        if (powered)
+        {
+            auto tablet = GoldenFedor::Tablet::Lowered;
+            if (cameraMonitor_.isFullyRaised())
+                tablet = GoldenFedor::Tablet::Raised;
+            else if (cameraMonitor_.isRaised())
+                tablet = GoldenFedor::Tablet::Moving;
+            goldenFedor_.update(elapsed.asSeconds(), tablet);
+        }
+        cameraMonitor_.setFedorPosition(fedor_.position(), fedor_.pose());
+        cameraMonitor_.setBonnyPosition(bonny_.position(), bonny_.pose());
+        cameraMonitor_.setChicaPosition(chica_.position(), chica_.pose());
+        cameraMonitor_.setFoxyPosition(foxy_.position(), foxy_.pose());
+        if (fedor_.startedStep())
+            officeAudio_.playFedorMove();
+        if (bonny_.startedStep())
+            officeAudio_.playBonnyMove();
+        if (chica_.startedStep())
+            officeAudio_.playChicaMove();
+        if (chica_.startedKitchenVisit())
+            officeAudio_.playKitchenVisit();
+        if (fedor_.retreatedFromDoor() || bonny_.retreatedFromDoor())
+            officeAudio_.playDoorKnock();
+        if (chica_.retreatedFromDoor() || foxy_.blockedCost() > 0)
+            officeAudio_.playDoorKnock(true);
+        if (powered)
+            officeAudio_.update(elapsed);
+    }
+    if (!powered)
+        blackout_.update(elapsed.asSeconds());
 
 	if (leftDoor_.closedAmount() != previousLeft ||
 		rightDoor_.closedAmount() != previousRight)
@@ -510,26 +540,33 @@ void OfficeScreen::render(sf::RenderTarget& target) const
         drawInCorridor(target, bonny_, corridorBonny_);
     else
         drawInCorridor(target, fedor_, corridorFedor_);
-    drawInCorridor(target, chica_, corridorChica_, true);
+    if (foxy_.officeApproach())
+        drawInCorridor(target, foxy_, corridorFoxy_, true);
+    else
+        drawInCorridor(target, chica_, corridorChica_, true);
 	fan_.render(target);
     if (power_.hasPower())
 	{
 		monitor_.render(target);
 	}
 
+    drawGoldenFedor(target);
+
     target.setView(previousView);
-    
+    if (!power_.hasPower())
+    {
+        sf::RectangleShape darkness({1920.f, 1080.f});
+        darkness.setFillColor({0, 0, 0, 220});
+        target.draw(darkness);
+        target.setView(camera_.getView());
+        drawBlackoutFedor(target);
+        target.setView(previousView);
+    }
+
     cameraMonitor_.render(target);
     if (power_.hasPower() && !cameraMonitor_.tabletInMotion())
-    tabletHandle_.render(target, tabletHudView, cameraMonitor_.tabletBarIsOpen());
-    
-    if (!power_.hasPower())
-	{
-		sf::RectangleShape darkness({1920.f, 1080.f});
-		darkness.setFillColor(sf::Color(0, 0, 0, 220));
-		target.draw(darkness);
-	}
-    
+        tabletHandle_.render(target, tabletHudView, cameraMonitor_.tabletBarIsOpen());
+
     target.draw(clockLabel_);
     target.draw(nightLabel_);
     renderPowerHud(target);
@@ -559,13 +596,16 @@ void OfficeScreen::startNight(unsigned night)
 	
 	power_.reset();
 	cameraMonitor_.reset();
+    goldenFedor_.reset();
 	
 	fedor_.reset(cameraMonitor_.buildingMap(), night);
     bonny_.reset(cameraMonitor_.buildingMap(), night);
     chica_.reset(cameraMonitor_.buildingMap(), night);
+    foxy_.reset(cameraMonitor_.buildingMap(), night);
 	cameraMonitor_.setFedorPosition(fedor_.position(), fedor_.pose());
     cameraMonitor_.setBonnyPosition(bonny_.position(), bonny_.pose());
     cameraMonitor_.setChicaPosition(chica_.position(), chica_.pose());
+    cameraMonitor_.setFoxyPosition(foxy_.position(), foxy_.pose());
 	
 	lighting_.setBlackout(false);
 	monitor_.update(sf::Time{});
@@ -587,6 +627,7 @@ void OfficeScreen::startNight(unsigned night)
 	rightLightButton_.setState(false, 0.f);
 	
 	blackoutSound_.stop();
+    blackout_.reset();
 }
 
 bool OfficeScreen::hasFinishedNight() const
@@ -596,16 +637,23 @@ bool OfficeScreen::hasFinishedNight() const
 
 std::optional<AnimatronicKind> OfficeScreen::attacker() const
 {
+    if (!power_.hasPower())
+        return blackout_.hasAttacked() ? std::optional{AnimatronicKind::Fedor} : std::nullopt;
     if (fedor_.hasAttacked())
         return AnimatronicKind::Fedor;
     if (bonny_.hasAttacked())
         return AnimatronicKind::Bonny;
     if (chica_.hasAttacked())
         return AnimatronicKind::Chica;
+    if (foxy_.hasAttacked())
+        return AnimatronicKind::Foxy;
+    if (goldenFedor_.state() == GoldenFedor::State::Attacked)
+        return AnimatronicKind::GoldenFedor;
     return std::nullopt;
 }
 
-void OfficeScreen::drawInCorridor(sf::RenderTarget& target, const AnimatronicMovement& actor,
+template<class Actor>
+void OfficeScreen::drawInCorridor(sf::RenderTarget& target, const Actor& actor,
                                  FedorModel& model, bool rightSide) const
 {
     const auto& door = rightSide ? rightDoor_ : leftDoor_;
@@ -681,6 +729,82 @@ void OfficeScreen::drawInCorridor(sf::RenderTarget& target, const AnimatronicMov
     sf::RenderStates states;
     states.texture = &image;
     target.draw(vertices.data(), vertices.size(), sf::PrimitiveType::TriangleStrip, states);
+}
+
+void OfficeScreen::drawBlackoutFedor(sf::RenderTarget& target) const
+{
+    const float brightness = blackout_.faceBrightness();
+    if (brightness <= 0.f || leftDoor_.closedAmount() > 0.25f)
+        return;
+
+    const auto corners = makeLeftDoorCorners(backgroundTexture_.getSize());
+    const auto top = (corners[0] + corners[1]) / 2.f;
+    const auto bottom = (corners[3] + corners[2]) / 2.f;
+    const auto center = top + (bottom - top) * 0.36f;
+
+    const auto& image = corridorFedor_.render({}, -0.16f);
+    const float width = (corners[1].x - corners[0].x) * 0.71f;
+    const float height = width * 0.59f;
+    const auto tl = center - sf::Vector2f{width / 2.f, height / 2.f};
+    const auto alpha = static_cast<std::uint8_t>(240.f * brightness);
+    const sf::Color lit{242, 212, 153, alpha};
+    const sf::Color fading{155, 133, 100, 0};
+    const std::array<sf::Vertex, 6> face{{
+        {tl, lit, {26.f, 25.f}},
+        {tl + sf::Vector2f{width, 0.f}, lit, {166.f, 25.f}},
+        {tl + sf::Vector2f{0.f, height * 0.84f}, lit, {26.f, 90.f}},
+        {tl + sf::Vector2f{width, height * 0.84f}, lit, {166.f, 90.f}},
+        {tl + sf::Vector2f{0.f, height}, fading, {26.f, 103.f}},
+        {tl + sf::Vector2f{width, height}, fading, {166.f, 103.f}}
+    }};
+    sf::RenderStates states;
+    states.texture = &image;
+    target.draw(face.data(), face.size(), sf::PrimitiveType::TriangleStrip, states);
+}
+
+void OfficeScreen::drawGoldenFedor(sf::RenderTarget& target) const
+{
+    const auto state = goldenFedor_.state();
+    if (state != GoldenFedor::State::Present && state != GoldenFedor::State::Glimpse)
+        return;
+
+    const sf::Vector2f floor{background_.getGlobalBounds().size.x * 0.52f, 990.f};
+    const float ghost = goldenFedor_.ghostAmount();
+    const float brightness = lamp_.brightness();
+    const auto tint = static_cast<std::uint8_t>(175.f + 67.f * brightness);
+    if (state == GoldenFedor::State::Present)
+    {
+        constexpr std::size_t segments = 36;
+        std::array<sf::Vertex, segments + 2> shadow{};
+        const auto center = floor - sf::Vector2f{6.f, 55.f};
+        shadow[0] = {center, sf::Color(0, 0, 0, 125)};
+        for (std::size_t i = 0; i <= segments; ++i)
+        {
+            const float angle = 6.2831853f * static_cast<float>(i) / segments;
+            shadow[i + 1] = {center + sf::Vector2f{220.f * std::cos(angle), 83.f * std::sin(angle)},
+                             sf::Color::Transparent};
+        }
+        target.draw(shadow.data(), shadow.size(), sf::PrimitiveType::TriangleFan);
+    }
+
+    const auto& image = goldenModel_.render({}, -0.27f);
+    sf::Sprite figure(image);
+    const sf::Vector2f size(image.getSize());
+    figure.setOrigin({size.x / 2.f, size.y - 8.f});
+    figure.setPosition(floor);
+    figure.setScale({1.43f, 1.43f});
+    const auto opacity = static_cast<std::uint8_t>(
+        state == GoldenFedor::State::Glimpse ? 150.f * ghost : 255.f - 56.f * ghost);
+    figure.setColor({tint, static_cast<std::uint8_t>(tint * 0.91f),
+                     static_cast<std::uint8_t>(tint * 0.80f), opacity});
+    target.draw(figure);
+
+    if (ghost > 0.f)
+    {
+        figure.move({12.f + 9.f * ghost, -6.f});
+        figure.setColor({96, 140, 147, static_cast<std::uint8_t>(70.f * ghost)});
+        target.draw(figure);
+    }
 }
 
 void OfficeScreen::drawOffice(sf::RenderTarget& target) const
@@ -795,11 +919,13 @@ void OfficeScreen::stopForNightCompletion()
     camera_.stop();
     
     blackoutSound_.stop();
+    blackout_.reset();
     officeAudio_.stop();
 }
 
 void OfficeScreen::beginBlackout()
 {
+    goldenFedor_.reset();
 	cameraMonitor_.lower();
 	
     clearLightInput();
@@ -819,7 +945,8 @@ void OfficeScreen::beginBlackout()
     fanSound_.stop();
     lightSounds_.stop();
     doorSounds_.stop();
-    officeAudio_.stopAmbience();
+    officeAudio_.stop();
+    blackout_.start();
     
     blackoutSound_.play();
 }

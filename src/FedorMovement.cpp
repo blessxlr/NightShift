@@ -42,7 +42,9 @@ const MovementProfile& profile(AnimatronicKind kind)
     {
         case AnimatronicKind::Bonny: return bonny;
         case AnimatronicKind::Chica: return chica;
-        case AnimatronicKind::Fedor: return fedor;
+        case AnimatronicKind::Fedor:
+        case AnimatronicKind::Foxy:
+        case AnimatronicKind::GoldenFedor: return fedor;
     }
     return fedor;
 }

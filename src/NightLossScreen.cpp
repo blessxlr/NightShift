@@ -10,10 +10,11 @@
 NightLossScreen::NightLossScreen(const sf::Font& font)
     : label_(font, L"Смена провалена", 36u)
 {
-    constexpr std::array<const char*, 3> stillPaths{
+    constexpr std::array<const char*, 4> stillPaths{
         "assets/images/night-loss.png",
         "assets/images/night-loss-bonny.png",
-        "assets/images/night-loss-chica.png"
+        "assets/images/night-loss-chica.png",
+        "assets/images/night-loss-foxy.png"
     };
     for (std::size_t index = 0; index < stills_.size(); ++index)
     {
@@ -76,6 +77,25 @@ void NightLossScreen::render(sf::RenderTarget& target) const
     sf::RectangleShape backdrop({1920.f, 1080.f});
     const auto index = static_cast<std::size_t>(attacker_);
 
+    if (attacker_ == AnimatronicKind::GoldenFedor)
+    {
+        backdrop.setFillColor({7, 9, 8});
+        target.draw(backdrop);
+        const auto& image = models_[index].render({}, -0.18f, 0.20f);
+        const sf::Vector2f size(image.getSize());
+        sf::Sprite face(image);
+        face.setOrigin({size.x / 2.f, size.y * 0.32f});
+        const float shake = isScare() ? 12.f * std::sin(elapsed_ * 35.f) : 0.f;
+        face.setPosition({960.f + shake, 465.f});
+        const float zoom = isScare() ? 2.5f + 0.18f * std::sin(elapsed_ * 13.f) : 1.85f;
+        face.setScale({zoom, zoom});
+        face.setColor(isScare() ? sf::Color(218, 212, 174) : sf::Color(129, 125, 102));
+        target.draw(face);
+        if (!isScare())
+            target.draw(label_);
+        return;
+    }
+
     if (!isScare())
     {
         backdrop.setFillColor(sf::Color::Black);
@@ -118,7 +138,7 @@ void NightLossScreen::render(sf::RenderTarget& target) const
     const auto& image = models_[index].render({}, turn, jaw);
     sf::Sprite actor(image);
     const auto size = sf::Vector2f(image.getSize());
-    actor.setOrigin({0.5f * size.x, (71.f / 288.f) * size.y});
+    actor.setOrigin({0.5f * size.x, ((attacker_ == AnimatronicKind::Foxy ? 103.f : 71.f) / 288.f) * size.y});
     actor.setPosition({470.f + 490.f * lunge + shake + 90.f * fall,
                        710.f - 185.f * lunge + 265.f * fall - 35.f * snap * strain});
     const float scale = (2.5f + 10.5f * lunge + (0.72f * snap - 0.4f) * strain - 2.f * fall) *

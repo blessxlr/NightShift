@@ -21,6 +21,7 @@ private:
     int resolutionScale_;
     std::vector<std::uint8_t> pixels_;
     std::vector<float> depth_;
+    int lastRest_ = -1;
     int lastAngle_ = -10000;
     int lastPhase_ = -10000;
     int lastStride_ = -10000;

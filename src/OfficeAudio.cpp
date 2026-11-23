@@ -81,6 +81,7 @@ OfficeAudio::OfficeAudio()
       bonnySteps_({"assets/audio/bonny-footsteps.wav"}, 56.f, -0.36f),
       chicaSteps_({"assets/audio/chica-footsteps.wav"}, 56.f, 0.36f),
       kitchen_({"assets/audio/chica-kitchen.wav"}, 64.f, 0.68f),
+      sprint_({"assets/audio/foxy-run.mp3"}, 60.f, 0.5f),
       knocks_({"assets/audio/fedor-knock-1.mp3", "assets/audio/fedor-knock-2.mp3",
                "assets/audio/fedor-knock-3.mp3"}, 63.f, -0.58f)
 {
@@ -125,6 +126,11 @@ void OfficeAudio::playChicaMove()
     chicaSteps_.play(random_);
 }
 
+void OfficeAudio::playFoxySprint()
+{
+    sprint_.play(random_);
+}
+
 void OfficeAudio::playKitchenVisit()
 {
     kitchen_.play(random_);
@@ -141,6 +147,7 @@ void OfficeAudio::pause()
     bonnySteps_.pause();
     chicaSteps_.pause();
     kitchen_.pause();
+    sprint_.pause();
     knocks_.pause();
     ambience_.pause();
 }
@@ -151,6 +158,7 @@ void OfficeAudio::resume()
     bonnySteps_.resume();
     chicaSteps_.resume();
     kitchen_.resume();
+    sprint_.resume();
     knocks_.resume();
     if (ambience_.getStatus() == sf::SoundSource::Status::Paused)
         ambience_.play();
@@ -162,6 +170,7 @@ void OfficeAudio::stop()
     bonnySteps_.stop();
     chicaSteps_.stop();
     kitchen_.stop();
+    sprint_.stop();
     knocks_.stop();
     stopAmbience();
     lastAmbience_.reset();

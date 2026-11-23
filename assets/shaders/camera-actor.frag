@@ -11,6 +11,9 @@ uniform float bonnyDepth;
 uniform sampler2D chicaImage;
 uniform vec4 chicaRect;
 uniform float chicaDepth;
+uniform sampler2D foxyImage;
+uniform vec4 foxyRect;
+uniform float foxyDepth;
 
 vec4 sampleActor(sampler2D image, vec4 rectangle, float depth,
                  vec2 uv, float visibleDepth, float beam)
@@ -54,11 +57,15 @@ void main()
     vec4 fedor = sampleActor(actorImage, actorRect, actorDepth, uv, visibleDepth, beam);
     vec4 bonny = sampleActor(bonnyImage, bonnyRect, bonnyDepth, uv, visibleDepth, beam);
     vec4 chica = sampleActor(chicaImage, chicaRect, chicaDepth, uv, visibleDepth, beam);
-    float farDepth = actorDepth, middleDepth = bonnyDepth, nearDepth = chicaDepth;
-    farToNear(fedor, farDepth, bonny, middleDepth);
-    farToNear(bonny, middleDepth, chica, nearDepth);
-    farToNear(fedor, farDepth, bonny, middleDepth);
+    vec4 foxy = sampleActor(foxyImage, foxyRect, foxyDepth, uv, visibleDepth, beam);
+    float a = actorDepth, b = bonnyDepth, c = chicaDepth, d = foxyDepth;
+    farToNear(fedor, a, bonny, b);
+    farToNear(chica, c, foxy, d);
+    farToNear(fedor, a, chica, c);
+    farToNear(bonny, b, foxy, d);
+    farToNear(bonny, b, chica, c);
     vec3 color = mix(background.rgb, fedor.rgb, fedor.a);
     color = mix(color, bonny.rgb, bonny.a);
-    gl_FragColor = vec4(mix(color, chica.rgb, chica.a), 1.0);
+    color = mix(color, chica.rgb, chica.a);
+    gl_FragColor = vec4(mix(color, foxy.rgb, foxy.a), 1.0);
 }

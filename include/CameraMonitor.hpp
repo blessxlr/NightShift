@@ -36,6 +36,7 @@ public:
 		return map_;
 	}
     [[nodiscard]] bool isRaised() const;
+    [[nodiscard]] bool isFullyRaised() const { return wantsOpen_ && progress_ >= 1.f; }
     
     void setFedorPosition(std::optional<BuildingMap::Point> position, FedorPose pose)
 	{
@@ -55,6 +56,12 @@ public:
         chicaPose_ = pose;
     }
     
+    bool isWatching(unsigned number) const;
+    void setFoxyPosition(std::optional<BuildingMap::Point> position, FedorPose pose)
+    {
+        foxyPosition_ = position;
+        foxyPose_ = pose;
+    }
     void selectCamera(unsigned number);
     
     void handleClick(sf::Vector2f point);
@@ -98,6 +105,9 @@ private:
     mutable FedorModel bonnyModel_{false, AnimatronicKind::Bonny};
     FedorPose bonnyPose_;
     std::optional<BuildingMap::Point> bonnyPosition_;
+    mutable FedorModel foxyModel_{false, AnimatronicKind::Foxy};
+    FedorPose foxyPose_;
+    std::optional<BuildingMap::Point> foxyPosition_;
     mutable FedorModel chicaModel_{false, AnimatronicKind::Chica};
     FedorPose chicaPose_;
     std::optional<BuildingMap::Point> chicaPosition_;

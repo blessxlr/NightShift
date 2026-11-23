@@ -8,7 +8,9 @@ enum class AnimatronicKind
 {
     Fedor,
     Bonny,
-    Chica
+    Chica,
+    Foxy,
+    GoldenFedor
 };
 
 struct FedorPose
@@ -16,6 +18,7 @@ struct FedorPose
     float yaw = 1.5707963f;
     float phase = 0.f;
     float stride = 0.f;
+    float rest = 0.f;
 };
 
 class AnimatronicMovement

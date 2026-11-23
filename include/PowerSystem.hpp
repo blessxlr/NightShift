@@ -4,6 +4,7 @@ class PowerSystem
 {
 public:
     void reset();
+    void consume(unsigned percentagePoints);
     void update(double nightProgress, unsigned activeDevices);
 
     [[nodiscard]] unsigned percent() const;

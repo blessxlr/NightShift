@@ -21,6 +21,7 @@ public:
     void playBonnyMove();
     void playChicaMove();
     void playKitchenVisit();
+    void playFoxySprint();
     void playDoorKnock(bool rightSide = false);
     void pause();
     void resume();
@@ -49,6 +50,7 @@ private:
     CuePool bonnySteps_;
     CuePool chicaSteps_;
     CuePool kitchen_;
+    CuePool sprint_;
     CuePool knocks_;
     sf::Music ambience_;
     std::mt19937 random_{std::random_device{}()};

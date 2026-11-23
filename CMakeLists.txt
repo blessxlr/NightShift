@@ -53,6 +53,9 @@ add_executable(NightShift
 	src/CameraFeed.cpp
 	src/RoutePlanner.cpp
 	src/FedorMovement.cpp
+    src/FoxyMovement.cpp
+    src/GoldenFedor.cpp
+    src/BlackoutSequence.cpp
     src/FedorModel.cpp
     src/NightLossScreen.cpp
 )
