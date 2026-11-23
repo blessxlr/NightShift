@@ -8,7 +8,7 @@
 #include "NightIntroScreen.hpp"
 #include "SwitchSound.hpp"
 #include "NightCompleteScreen.hpp"
-#include "NightCompleteScreen.hpp"
+#include "NightLossScreen.hpp"
 #include "SaveGame.hpp"
 
 #include <SFML/Graphics/Font.hpp>
@@ -34,6 +34,7 @@ private:
         Controls,
         NightIntro,
         NightComplete,
+        NightLoss,
         Office
     };
 
@@ -54,6 +55,7 @@ private:
     NightIntroScreen nightIntroScreen_;
     OfficeScreen officeScreen_;
     NightCompleteScreen nightCompleteScreen_;
+    NightLossScreen nightLossScreen_;
 	unsigned currentNight_ = 1u;
 	unsigned completedNights_ = 0u;
 

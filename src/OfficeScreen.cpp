@@ -1,5 +1,9 @@
 #include "OfficeScreen.hpp"
 
+#include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
 #include <string>
 
 #include <SFML/Graphics/Color.hpp>
@@ -8,6 +12,8 @@
 #include <SFML/Window/Keyboard.hpp>
 #include <SFML/Window/Mouse.hpp>
 #include <SFML/Graphics/RectangleShape.hpp>
+#include <SFML/Graphics/Vertex.hpp>
+#include <SFML/Graphics/RenderStates.hpp>
 
 namespace
 {
@@ -252,6 +258,7 @@ void OfficeScreen::handleEvent(const sf::Event& event, const sf::RenderTarget& t
     {
         hasFocus_ = false;
         blackoutSound_.pause();
+        officeAudio_.pause();
         nightTimer_.pause();
         camera_.stop();
         leftLightMouseHeld_ = false;
@@ -268,6 +275,7 @@ void OfficeScreen::handleEvent(const sf::Event& event, const sf::RenderTarget& t
     {
         hasFocus_ = true;
         blackoutSound_.resume();
+        officeAudio_.resume();
         if (nightStarted_)
         {
 			nightTimer_.resume();
@@ -355,6 +363,7 @@ void OfficeScreen::update(sf::Time elapsed)
 
 	cameraMonitor_.update(elapsed);
 
+
 	const bool leftRequested = leftLightKeyHeld_ || leftLightMouseHeld_;
 
 	const bool rightRequested = rightLightKeyHeld_ || rightLightMouseHeld_;
@@ -419,8 +428,29 @@ void OfficeScreen::update(sf::Time elapsed)
 
 	leftDoor_.update(elapsed);
 	rightDoor_.update(elapsed);
-	fedor_.update(elapsed.asSeconds(), leftDoor_.isClosed());
-	cameraMonitor_.setFedorPosition(fedor_.position());
+
+    const bool leftClosed = powered && leftDoor_.isClosed();
+    const unsigned hour = nightTimer_.hour();
+    fedor_.update(elapsed.asSeconds(), leftClosed, hour, !bonny_.officeApproach());
+    bonny_.update(elapsed.asSeconds(), leftClosed, hour, !fedor_.officeApproach());
+    chica_.update(elapsed.asSeconds(), powered && rightDoor_.isClosed(), hour);
+    cameraMonitor_.setFedorPosition(fedor_.position(), fedor_.pose());
+    cameraMonitor_.setBonnyPosition(bonny_.position(), bonny_.pose());
+    cameraMonitor_.setChicaPosition(chica_.position(), chica_.pose());
+    if (fedor_.startedStep())
+        officeAudio_.playFedorMove();
+    if (bonny_.startedStep())
+        officeAudio_.playBonnyMove();
+    if (chica_.startedStep())
+        officeAudio_.playChicaMove();
+    if (chica_.startedKitchenVisit())
+        officeAudio_.playKitchenVisit();
+    if (fedor_.retreatedFromDoor() || bonny_.retreatedFromDoor())
+        officeAudio_.playDoorKnock();
+    if (chica_.retreatedFromDoor())
+        officeAudio_.playDoorKnock(true);
+    if (powered)
+        officeAudio_.update(elapsed);
 
 	if (leftDoor_.closedAmount() != previousLeft ||
 		rightDoor_.closedAmount() != previousRight)
@@ -476,6 +506,11 @@ void OfficeScreen::render(sf::RenderTarget& target) const
 
         lighting_.renderRoom(target, roomImage_);
     }
+    if (bonny_.officeApproach())
+        drawInCorridor(target, bonny_, corridorBonny_);
+    else
+        drawInCorridor(target, fedor_, corridorFedor_);
+    drawInCorridor(target, chica_, corridorChica_, true);
 	fan_.render(target);
     if (power_.hasPower())
 	{
@@ -502,6 +537,7 @@ void OfficeScreen::render(sf::RenderTarget& target) const
 
 void OfficeScreen::startNight(unsigned night)
 {
+    officeAudio_.startNight();
 	tabletHandle_.reset();
 	nightLabel_.setString(L"Ночь " + std::to_wstring(night));
 
@@ -525,7 +561,11 @@ void OfficeScreen::startNight(unsigned night)
 	cameraMonitor_.reset();
 	
 	fedor_.reset(cameraMonitor_.buildingMap(), night);
-	cameraMonitor_.setFedorPosition(fedor_.position());
+    bonny_.reset(cameraMonitor_.buildingMap(), night);
+    chica_.reset(cameraMonitor_.buildingMap(), night);
+	cameraMonitor_.setFedorPosition(fedor_.position(), fedor_.pose());
+    cameraMonitor_.setBonnyPosition(bonny_.position(), bonny_.pose());
+    cameraMonitor_.setChicaPosition(chica_.position(), chica_.pose());
 	
 	lighting_.setBlackout(false);
 	monitor_.update(sf::Time{});
@@ -552,6 +592,95 @@ void OfficeScreen::startNight(unsigned night)
 bool OfficeScreen::hasFinishedNight() const
 {
     return nightTimer_.isFinished();
+}
+
+std::optional<AnimatronicKind> OfficeScreen::attacker() const
+{
+    if (fedor_.hasAttacked())
+        return AnimatronicKind::Fedor;
+    if (bonny_.hasAttacked())
+        return AnimatronicKind::Bonny;
+    if (chica_.hasAttacked())
+        return AnimatronicKind::Chica;
+    return std::nullopt;
+}
+
+void OfficeScreen::drawInCorridor(sf::RenderTarget& target, const AnimatronicMovement& actor,
+                                 FedorModel& model, bool rightSide) const
+{
+    const auto& door = rightSide ? rightDoor_ : leftDoor_;
+    const auto& lightSource = rightSide ? rightLight_ : leftLight_;
+    const auto approach = actor.officeApproach();
+    if (!approach || !power_.hasPower() || door.isClosed())
+        return;
+
+    const float distance = *approach;
+    const float bottom = 0.82f + 0.16f * distance;
+    const float height = 0.43f + 0.40f * distance;
+    const float top = bottom - height;
+    const float clippedTop = std::max(top, door.closedAmount());
+    if (clippedTop >= bottom)
+        return;
+
+    const auto pose = actor.pose();
+    const auto& image = model.render(pose, actor.officeViewYaw() - pose.yaw);
+    const auto pixels = sf::Vector2f(image.getSize());
+    const auto corners = rightSide
+        ? makeRightDoorCorners(backgroundTexture_.getSize())
+        : makeLeftDoorCorners(backgroundTexture_.getSize());
+
+    const float leftCenter = 0.43f + 0.10f * distance;
+    const float center = rightSide ? 1.f - leftCenter : leftCenter;
+    const float halfWidth = 0.18f + 0.25f * distance;
+    const auto project = [&](float x, float y) {
+        const auto topEdge = corners[0] + (corners[1] - corners[0]) * x;
+        const auto bottomEdge = corners[3] + (corners[2] - corners[3]) * x;
+        return topEdge + (bottomEdge - topEdge) * y;
+    };
+
+    const float light = std::clamp(lightSource.intensity(), 0.f, 1.f);
+    if (light > 0.f)
+    {
+        constexpr std::size_t segments = 16;
+        constexpr float fullTurn = 6.2831853f;
+        const float shadowY = bottom - 0.016f;
+        const float shadowWidth = 0.13f + 0.15f * distance;
+        const float shadowHeight = 0.018f + 0.014f * distance;
+        const auto edge = [&](std::size_t i) {
+            const float angle = i * fullTurn / segments;
+            const float y = std::clamp(shadowY + std::sin(angle) * shadowHeight, clippedTop, 1.f);
+            return sf::Vertex{project(center + std::cos(angle) * shadowWidth, y),
+                              sf::Color::Transparent};
+        };
+        const sf::Vertex middle{
+            project(center, std::max(shadowY, clippedTop)),
+            {0, 0, 0, static_cast<std::uint8_t>(104.f * light)}
+        };
+        std::array<sf::Vertex, segments * 3> shadow;
+        for (std::size_t i = 0; i < segments; ++i)
+        {
+            shadow[i * 3] = middle;
+            shadow[i * 3 + 1] = edge(i);
+            shadow[i * 3 + 2] = edge(i + 1);
+        }
+        target.draw(shadow.data(), shadow.size(), sf::PrimitiveType::Triangles);
+    }
+
+    const sf::Color tint{
+        static_cast<std::uint8_t>(18.f + 193.f * light),
+        static_cast<std::uint8_t>(20.f + 210.f * light),
+        static_cast<std::uint8_t>(24.f + 225.f * light)
+    };
+    const float sourceTop = (clippedTop - top) * pixels.y / height;
+    const std::array<sf::Vertex, 4> vertices{{
+        {project(center - halfWidth, clippedTop), tint, {0.f, sourceTop}},
+        {project(center + halfWidth, clippedTop), tint, {pixels.x, sourceTop}},
+        {project(center - halfWidth, bottom), tint, {0.f, pixels.y}},
+        {project(center + halfWidth, bottom), tint, pixels}
+    }};
+    sf::RenderStates states;
+    states.texture = &image;
+    target.draw(vertices.data(), vertices.size(), sf::PrimitiveType::TriangleStrip, states);
 }
 
 void OfficeScreen::drawOffice(sf::RenderTarget& target) const
@@ -666,6 +795,7 @@ void OfficeScreen::stopForNightCompletion()
     camera_.stop();
     
     blackoutSound_.stop();
+    officeAudio_.stop();
 }
 
 void OfficeScreen::beginBlackout()
@@ -689,6 +819,7 @@ void OfficeScreen::beginBlackout()
     fanSound_.stop();
     lightSounds_.stop();
     doorSounds_.stop();
+    officeAudio_.stopAmbience();
     
     blackoutSound_.play();
 }

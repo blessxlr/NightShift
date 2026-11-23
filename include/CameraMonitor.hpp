@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CameraFeed.hpp"
+#include "FedorModel.hpp"
 #include "TvEffect.hpp"
 
 #include <SFML/Graphics/RectangleShape.hpp>
@@ -36,10 +37,23 @@ public:
 	}
     [[nodiscard]] bool isRaised() const;
     
-    void setFedorPosition(std::optional<BuildingMap::Point> position)
+    void setFedorPosition(std::optional<BuildingMap::Point> position, FedorPose pose)
 	{
 		fedorPosition_ = position;
+		fedorPose_ = pose;
 	}
+
+    void setBonnyPosition(std::optional<BuildingMap::Point> position, FedorPose pose)
+    {
+        bonnyPosition_ = position;
+        bonnyPose_ = pose;
+    }
+
+    void setChicaPosition(std::optional<BuildingMap::Point> position, FedorPose pose)
+    {
+        chicaPosition_ = position;
+        chicaPose_ = pose;
+    }
     
     void selectCamera(unsigned number);
     
@@ -78,8 +92,15 @@ private:
 	void playSignalTransition();
 	float interferenceLeft_ = 0.f;
 
-	sf::Texture fedorTexture_;
+	mutable FedorModel fedorModel_;
+	FedorPose fedorPose_;
 	std::optional<BuildingMap::Point> fedorPosition_;
+    mutable FedorModel bonnyModel_{false, AnimatronicKind::Bonny};
+    FedorPose bonnyPose_;
+    std::optional<BuildingMap::Point> bonnyPosition_;
+    mutable FedorModel chicaModel_{false, AnimatronicKind::Chica};
+    FedorPose chicaPose_;
+    std::optional<BuildingMap::Point> chicaPosition_;
 	
 	mutable sf::Shader actorShader_;
 	bool actorReady_ = false;

@@ -6,53 +6,12 @@
 #include <SFML/Graphics/Vertex.hpp>
 #include <SFML/System/String.hpp>
 #include <SFML/Graphics/View.hpp>
-#include <SFML/Graphics/Image.hpp>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
-
-namespace
-{
-bool loadActorTexture(sf::Texture& texture)
-{
-    sf::Image image;
-    if (!image.loadFromFile("assets/images/fedor-camera.png"))
-        return false;
-
-    const auto size = image.getSize();
-    unsigned left = size.x;
-    unsigned top = size.y;
-    unsigned right = 0;
-    unsigned bottom = 0;
-
-    for (unsigned y = 0; y < size.y; ++y)
-    {
-        for (unsigned x = 0; x < size.x; ++x)
-        {
-            if (image.getPixel({x, y}).a < 32)
-                continue;
-
-            left = std::min(left, x);
-            right = std::max(right, x);
-            top = std::min(top, y);
-            bottom = std::max(bottom, y);
-        }
-    }
-
-    if (left > right || top > bottom)
-        return false;
-
-    const sf::IntRect bounds{
-        {static_cast<int>(left), static_cast<int>(top)},
-        {static_cast<int>(right - left + 1), static_cast<int>(bottom - top + 1)}
-    };
-
-    return texture.loadFromImage(image, false, bounds);
-}
-}
 
 CameraMonitor::CameraMonitor(const sf::Font& font, SwitchSound& switchSound)
     : switchSound_(switchSound),
@@ -82,7 +41,6 @@ CameraMonitor::CameraMonitor(const sf::Font& font, SwitchSound& switchSound)
     buildMapLayout();
     
     actorReady_ = sf::Shader::isAvailable() &&
-    loadActorTexture(fedorTexture_) &&
     actorShader_.loadFromFile(
         std::filesystem::path{"assets/shaders/camera-actor.frag"},
         sf::Shader::Type::Fragment
@@ -90,9 +48,7 @@ CameraMonitor::CameraMonitor(const sf::Font& font, SwitchSound& switchSound)
 
 	if (actorReady_)
 	{
-		fedorTexture_.setSmooth(true);
 		actorShader_.setUniform("cameraFrame", sf::Shader::CurrentTexture);
-		actorShader_.setUniform("actorImage", fedorTexture_);
 	}
 
 	for (unsigned i = 0; i < BuildingMap::maxCameras; ++i)
@@ -344,33 +300,47 @@ void CameraMonitor::renderSelectedFeed(sf::RenderTarget& target) const
 
     sf::RenderStates states;
     states.texture = &feed.texture;
-    const auto& fedor = fedorPosition_;
+    if (actorReady_ && feed.depth.getSize() == feed.texture.getSize())
+    {
+        const auto& camera = map_.cameras[selectedFeed_];
+        const auto addActor = [&](const std::optional<BuildingMap::Point>& position,
+                                  FedorPose pose, FedorModel& model,
+                                  const char* texture, const char* rectangle, const char* depth) {
+            const auto placement = position
+                ? projectCameraActor(camera, projection, feed.texture.getSize(),
+                                     *position, FedorModel::aspectRatio)
+                : std::nullopt;
+            if (!placement)
+            {
+                actorShader_.setUniform(depth, -1.f);
+                return false;
+            }
 
-	if (fedor && actorReady_ && feed.depth.getSize() == feed.texture.getSize())
-	{
-		const auto sprite = fedorTexture_.getSize();
-		const auto actor = projectCameraActor(
-			map_.cameras[selectedFeed_],
-			projection,
-			feed.texture.getSize(),
-			*fedor,
-			static_cast<float>(sprite.x) / sprite.y
-		);
+            const float bearing = std::atan2(camera.y - position->y, camera.x - position->x);
+            const auto& image = model.render(pose, bearing - pose.yaw);
+            const auto& uv = placement->uv;
+            actorShader_.setUniform(texture, image);
+            actorShader_.setUniform(rectangle, sf::Glsl::Vec4{
+                uv.position.x, uv.position.y, uv.size.x, uv.size.y
+            });
+            actorShader_.setUniform(depth, placement->depth);
+            return true;
+        };
+        const bool fedorVisible = addActor(fedorPosition_, fedorPose_, fedorModel_,
+                                           "actorImage", "actorRect", "actorDepth");
+        const bool bonnyVisible = addActor(bonnyPosition_, bonnyPose_, bonnyModel_,
+                                           "bonnyImage", "bonnyRect", "bonnyDepth");
+        const bool chicaVisible = addActor(chicaPosition_, chicaPose_, chicaModel_,
+                                           "chicaImage", "chicaRect", "chicaDepth");
+        if (fedorVisible || bonnyVisible || chicaVisible)
+        {
+            actorShader_.setUniform("sceneDepth", feed.depth);
+            states.shader = &actorShader_;
+        }
+    }
 
-		if (actor)
-		{
-			const auto& uv = actor->uv;
-			actorShader_.setUniform("sceneDepth", feed.depth);
-			actorShader_.setUniform("actorRect", sf::Glsl::Vec4{
-				uv.position.x, uv.position.y, uv.size.x, uv.size.y
-			});
-			actorShader_.setUniform("actorDepth", actor->depth);
-			states.shader = &actorShader_;
-		}
-	}
-
-	target.draw(strip.data(), strip.size(), sf::PrimitiveType::TriangleStrip, states);
-	}
+    target.draw(strip.data(), strip.size(), sf::PrimitiveType::TriangleStrip, states);
+}
 
 void CameraMonitor::playSignalTransition()
 {

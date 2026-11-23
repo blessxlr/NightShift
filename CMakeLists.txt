@@ -39,6 +39,7 @@ add_executable(NightShift
 	src/LightButton.cpp
 	src/DoorSounds.cpp
 	src/LightSounds.cpp
+	src/OfficeAudio.cpp
 	src/OfficeFan.cpp
 	src/FanSound.cpp
 	src/TimeMeter.cpp
@@ -52,6 +53,8 @@ add_executable(NightShift
 	src/CameraFeed.cpp
 	src/RoutePlanner.cpp
 	src/FedorMovement.cpp
+    src/FedorModel.cpp
+    src/NightLossScreen.cpp
 )
 
 target_include_directories(NightShift PRIVATE
@@ -59,6 +62,10 @@ target_include_directories(NightShift PRIVATE
 )
 
 target_compile_features(NightShift PRIVATE cxx_std_17)
+
+set_property(SOURCE src/FedorModel.cpp APPEND PROPERTY COMPILE_OPTIONS
+    "$<$<AND:$<CXX_COMPILER_ID:GNU,Clang,AppleClang>,$<NOT:$<CONFIG:Release,RelWithDebInfo,MinSizeRel>>>:-O2>"
+)
 
 target_link_libraries(NightShift PRIVATE
 	SFML::Graphics

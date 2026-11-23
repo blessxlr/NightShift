@@ -19,10 +19,11 @@ Application::Application()
       switchSound_("assets/audio/night-start.wav"),
       saveGame_("saves/progress.txt"),
       mainMenu_(menuFont_),
-      nightCompleteScreen_(menuFont_),
       controlsScreen_(menuFont_, keyboardTexture_),
       nightIntroScreen_(menuFont_, switchSound_),
-      officeScreen_(menuFont_, switchSound_)
+      officeScreen_(menuFont_, switchSound_),
+      nightCompleteScreen_(menuFont_),
+      nightLossScreen_(menuFont_)
 {
     window_.setFramerateLimit(60);
 
@@ -85,7 +86,7 @@ void Application::update(sf::Time elapsed)
 
         if (nightIntroScreen_.isFinished())
         {
-            officeScreen_.startNight(currentNight_);;
+            officeScreen_.startNight(currentNight_);
             currentScreen_ = Screen::Office;
         }
     }
@@ -102,7 +103,26 @@ void Application::update(sf::Time elapsed)
 			nightCompleteScreen_.start();
 			currentScreen_ = Screen::NightComplete;
 		}
+        else if (const auto attacker = officeScreen_.attacker())
+        {
+            officeScreen_.stopForNightCompletion();
+            switchSound_.stop();
+            nightLossScreen_.start(*attacker);
+            currentScreen_ = Screen::NightLoss;
+        }
 	}
+    else if (currentScreen_ == Screen::NightLoss)
+    {
+        if (!window_.hasFocus())
+            return;
+        nightLossScreen_.update(elapsed);
+        if (nightLossScreen_.isFinished())
+        {
+            mainMenu_.resetHover();
+            currentScreen_ = Screen::MainMenu;
+            menuMusic_.play();
+        }
+    }
 	else if (currentScreen_ == Screen::NightComplete)
 	{
 		if (!window_.hasFocus())
@@ -200,12 +220,16 @@ void Application::processEvents()
 			menuMusic_.pause();
 			switchSound_.pause();
 			nightCompleteScreen_.pause();
+            if (currentScreen_ == Screen::NightLoss)
+                nightLossScreen_.pause();
 		}
 		else if (event->is<sf::Event::FocusGained>())
 		{
 			menuMusic_.resume();
 			switchSound_.resume();
 			nightCompleteScreen_.resume();
+            if (currentScreen_ == Screen::NightLoss)
+                nightLossScreen_.resume();
 		}
 
         const auto action = handleScreenEvent(*event);
@@ -241,7 +265,13 @@ void Application::render()
             officeScreen_.render(window_);
             break;
             
-         case Screen::NightComplete:
+        case Screen::NightLoss:
+            if (nightLossScreen_.isScare())
+                officeScreen_.render(window_);
+            nightLossScreen_.render(window_);
+            break;
+
+        case Screen::NightComplete:
 		officeScreen_.render(window_);
 		nightCompleteScreen_.render(window_);
 		break;  
@@ -261,7 +291,9 @@ MenuAction Application::handleScreenEvent(const sf::Event& event)
             return controlsScreen_.handleEvent(event, window_);
             
         case Screen::NightIntro:
-			return MenuAction::None;
+        case Screen::NightLoss:
+        case Screen::NightComplete:
+            return MenuAction::None;
 
         case Screen::Office:
             officeScreen_.handleEvent(event, window_);

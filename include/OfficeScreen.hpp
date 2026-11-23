@@ -14,6 +14,7 @@
 #include "OfficeFan.hpp"
 #include "FanSound.hpp"
 #include "NightTimer.hpp"
+#include "OfficeAudio.hpp"
 #include "PowerSystem.hpp"
 #include "CameraMonitor.hpp"
 #include "FedorMovement.hpp"
@@ -24,6 +25,8 @@
 #include <SFML/Graphics/Text.hpp>
 #include <SFML/Graphics/Texture.hpp>
 #include <SFML/Graphics/RenderTexture.hpp>
+
+#include <optional>
 
 namespace sf
 {
@@ -42,6 +45,7 @@ public:
     void startNight(unsigned night);
     [[nodiscard]] bool hasFinishedNight() const;
     void stopForNightCompletion();
+    [[nodiscard]] std::optional<AnimatronicKind> attacker() const;
 
 private:
     sf::Texture backgroundTexture_;
@@ -71,7 +75,13 @@ private:
     OfficeMonitor monitor_;
     OfficeCamera camera_;
     CameraMonitor cameraMonitor_;
-    FedorMovement fedor_;
+    AnimatronicMovement fedor_;
+    AnimatronicMovement bonny_{AnimatronicKind::Bonny};
+    AnimatronicMovement chica_{AnimatronicKind::Chica};
+    mutable FedorModel corridorFedor_;
+    mutable FedorModel corridorBonny_{false, AnimatronicKind::Bonny};
+    mutable FedorModel corridorChica_{false, AnimatronicKind::Chica};
+    OfficeAudio officeAudio_;
     sf::Text nightLabel_;
     sf::Text clockLabel_;
     sf::Text powerLabel_;
@@ -82,6 +92,8 @@ private:
     CorridorLight leftLight_;
 	CorridorLight rightLight_;
     void drawOffice(sf::RenderTarget& target) const;
+    void drawInCorridor(sf::RenderTarget& target, const AnimatronicMovement& actor,
+                        FedorModel& model, bool rightSide = false) const;
     
     void clearLightInput();
     void beginBlackout();

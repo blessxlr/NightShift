@@ -4,7 +4,7 @@ camera 3 190 125 "Электрощитовая" "view 135 76" 176 135
 camera 4 -45 216 "Обеденный зал" "view 333 76 27.5 0.25" -42 206
 camera 5 -40 240 "Игровые автоматы" "view 20 80 25 0.33" -34 249
 camera 6 210 125 "Мастерская" "view 60 84 27 0.21" 220 135
-camera 7 73.5 295 "Левый подход" "view 280 70 25 0.36" 73.5 273
+camera 7 73.5 295 "Левый подход" "view 280 70 25 0.36" 73.5 286
 camera 8 169 295 "Правый подход" "view 260 70 25 0.36" 169 286
 
 wall 20 20 180 20
@@ -53,7 +53,20 @@ point fedor_spawn 100 26
 point fedor_hall 100 128
 point fedor_dining 73 179
 point fedor_left_approach 74 255
+point bonny_spawn 120 27
+point bonny_hall 102 141
+point bonny_dining 58 195
+point bonny_left_approach 71 241
+point chica_spawn 80 27
+point chica_hall 99 143
+point chica_electrical 168 151
+point chica_right_approach 169 248
 point left_door 77 288
+point right_door 164 288
+
+point light_stage 95 61
+point light_hall 100 155
+point light_dining 45 187
 
 link 1 2
 link 2 3
