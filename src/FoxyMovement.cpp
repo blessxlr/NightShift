@@ -1,5 +1,6 @@
 #include "FoxyMovement.hpp"
 #include "RoutePlanner.hpp"
+#include "NightRules.hpp"
 
 #include <algorithm>
 #include <array>
@@ -27,7 +28,7 @@ float heading(Point from, Point to)
 
 float FoxyMovement::stageDelay()
 {
-    const float base = 35.f - 4.f * static_cast<float>(night_);
+    const float base = 35.f - 4.f * static_cast<float>(std::min(night_, NightRules::campaignFinal));
     return base + std::uniform_real_distribution<float>(0.f, 10.f)(random_);
 }
 
@@ -43,9 +44,10 @@ void FoxyMovement::returnHome()
     approachWalked_ = 0.f;
 }
 
-void FoxyMovement::reset(const BuildingMap& map, unsigned night)
+void FoxyMovement::reset(const BuildingMap& map, unsigned night, unsigned customLevel)
 {
-    night_ = std::clamp(night, 1u, 5u);
+    night_ = std::clamp(night, 1u, NightRules::custom);
+    customLevel_ = std::min(customLevel, NightRules::maxActivity);
     blockedAttacks_ = blockedCost_ = 0;
     attacked_ = startedSprint_ = mobile_ = false;
     readyPath_.clear();
@@ -61,7 +63,7 @@ void FoxyMovement::reset(const BuildingMap& map, unsigned night)
     home_ = spawn->second;
     camera_ = {map.cameras[5].x, map.cameras[5].y};
     returnHome();
-    if (night_ < 2)
+    if (night_ < 2 || (night_ == NightRules::custom && customLevel_ == 0u))
         return;
 
     const auto ready = map.navigationPoints.find("foxy_ready");
@@ -140,7 +142,7 @@ void FoxyMovement::sprint(float seconds)
     }
 }
 
-void FoxyMovement::update(float seconds, bool watched, bool doorClosed)
+void FoxyMovement::update(float seconds, bool watched, bool doorClosed, unsigned hour)
 {
     blockedCost_ = 0;
     startedSprint_ = false;
@@ -207,7 +209,13 @@ void FoxyMovement::update(float seconds, bool watched, bool doorClosed)
     pose_.stride = 0.f;
     const float faceCamera = heading(*position_, camera_) + 0.34f;
     pose_.yaw += std::clamp(std::remainder(faceCamera - pose_.yaw, tau), -seconds * 3.f, seconds * 3.f);
-    remaining_ -= seconds * (watched ? 0.20f : 1.f);
+    float activityRate = 1.f;
+    if (night_ == NightRules::bonus)
+        activityRate += (NightRules::bonusActivity(hour) - 16u) * 0.25f;
+    else if (night_ == NightRules::custom)
+        activityRate = customLevel_ <= 16u ? 0.25f + 0.75f * customLevel_ / 16.f
+                                          : 1.f + (customLevel_ - 16u) * 0.25f;
+    remaining_ -= seconds * activityRate * (watched ? 0.20f : 1.f);
     if (remaining_ > 0.f)
         return;
 

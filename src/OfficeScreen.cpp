@@ -438,7 +438,7 @@ void OfficeScreen::update(sf::Time elapsed)
         fedor_.update(elapsed.asSeconds(), leftClosed, hour, !bonny_.officeApproach());
         bonny_.update(elapsed.asSeconds(), leftClosed, hour, !fedor_.officeApproach());
         const bool rightClosed = rightDoor_.isClosed();
-        foxy_.update(elapsed.asSeconds(), cameraMonitor_.isWatching(6u), rightClosed);
+        foxy_.update(elapsed.asSeconds(), cameraMonitor_.isWatching(6u), rightClosed, hour);
         chica_.update(elapsed.asSeconds(), rightClosed, hour, !foxy_.officeApproach());
         if (foxy_.startedSprint())
             officeAudio_.playFoxySprint();
@@ -571,7 +571,7 @@ void OfficeScreen::render(sf::RenderTarget& target) const
     renderPowerHud(target);
 }
 
-void OfficeScreen::startNight(unsigned night)
+void OfficeScreen::startNight(unsigned night, const NightRules::Difficulty& levels)
 {
     officeAudio_.startNight();
 	tabletHandle_.reset();
@@ -597,10 +597,10 @@ void OfficeScreen::startNight(unsigned night)
 	cameraMonitor_.reset();
     goldenFedor_.reset();
 	
-	fedor_.reset(cameraMonitor_.buildingMap(), night);
-    bonny_.reset(cameraMonitor_.buildingMap(), night);
-    chica_.reset(cameraMonitor_.buildingMap(), night);
-    foxy_.reset(cameraMonitor_.buildingMap(), night);
+	fedor_.reset(cameraMonitor_.buildingMap(), night, levels[0]);
+    bonny_.reset(cameraMonitor_.buildingMap(), night, levels[1]);
+    chica_.reset(cameraMonitor_.buildingMap(), night, levels[2]);
+    foxy_.reset(cameraMonitor_.buildingMap(), night, levels[3]);
 	cameraMonitor_.setFedorPosition(fedor_.position(), fedor_.pose());
     cameraMonitor_.setBonnyPosition(bonny_.position(), bonny_.pose());
     cameraMonitor_.setChicaPosition(chica_.position(), chica_.pose());

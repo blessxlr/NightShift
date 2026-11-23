@@ -6,6 +6,7 @@ struct GameProgress
 {
     unsigned currentNight = 1u;
     unsigned completedNights = 0u;
+    unsigned stars = 0u;
 };
 
 class SaveGame

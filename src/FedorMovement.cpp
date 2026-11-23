@@ -1,5 +1,6 @@
 #include "FedorMovement.hpp"
 #include "RoutePlanner.hpp"
+#include "NightRules.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -88,7 +89,7 @@ AnimatronicMovement::AnimatronicMovement(AnimatronicKind kind)
 {
 }
 
-void AnimatronicMovement::reset(const BuildingMap& map, unsigned night)
+void AnimatronicMovement::reset(const BuildingMap& map, unsigned night, unsigned customLevel)
 {
     legs_.clear();
     pose_ = {};
@@ -115,7 +116,11 @@ void AnimatronicMovement::reset(const BuildingMap& map, unsigned night)
     moving_ = false;
     activity_ = 0u;
 
-    if (night >= 1 && night <= settings.activity.size())
+    if (night == NightRules::custom)
+        activity_ = std::min(customLevel, NightRules::maxActivity);
+    else if (night == NightRules::bonus)
+        activity_ = NightRules::bonusActivity(0u);
+    else if (night >= 1 && night <= settings.activity.size())
         activity_ = settings.activity[night - 1];
 
     const auto spawn = map.navigationPoints.find(settings.spawn);
@@ -161,7 +166,7 @@ void AnimatronicMovement::update(float seconds, bool doorClosed, unsigned hour, 
     startedStep_ = false;
     retreatedFromDoor_ = false;
     startedKitchenVisit_ = false;
-    if (!(seconds > 0.f) || attacked_ ||
+    if (!(seconds > 0.f) || attacked_ || activity_ == 0u ||
         (kind_ != AnimatronicKind::Fedor && night_ == 1u && hour == 0u))
         return;
 
@@ -186,7 +191,7 @@ void AnimatronicMovement::update(float seconds, bool doorClosed, unsigned hour, 
             return;
         }
 
-        const std::size_t rollback = night_ == 5u && kind_ == AnimatronicKind::Fedor
+        const std::size_t rollback = night_ >= NightRules::campaignFinal && kind_ == AnimatronicKind::Fedor
             ? std::uniform_int_distribution<unsigned>(2u, 3u)(random_)
             : nextLeg_;
         nextLeg_ -= std::min(nextLeg_, rollback);
@@ -231,8 +236,10 @@ void AnimatronicMovement::update(float seconds, bool doorClosed, unsigned hour, 
             }
         }
 
-        const bool firstMove = kind_ != AnimatronicKind::Fedor && !hasStarted_;
-        if (!firstMove && std::uniform_int_distribution<unsigned>(1u, 20u)(random_) > activity_)
+        const unsigned activity = night_ == NightRules::bonus ? NightRules::bonusActivity(hour) : activity_;
+        const bool firstMove = night_ < NightRules::bonus &&
+            kind_ != AnimatronicKind::Fedor && !hasStarted_;
+        if (!firstMove && std::uniform_int_distribution<unsigned>(1u, 20u)(random_) > activity)
             return;
 
         moving_ = true;
@@ -280,7 +287,7 @@ void AnimatronicMovement::update(float seconds, bool doorClosed, unsigned hour, 
     {
         atDoor_ = doorLeg_ == nextLeg_;
         if (atDoor_)
-            doorWait_ = settings.doorWait[night_ - 1];
+            doorWait_ = settings.doorWait[std::min<std::size_t>(night_, settings.doorWait.size()) - 1];
         ++nextLeg_;
         nextPoint_ = 1;
         moving_ = false;

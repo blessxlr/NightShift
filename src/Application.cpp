@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include <Application.hpp>
+#include "NightRules.hpp"
 
 #include <SFML/Graphics/Color.hpp>
 #include <SFML/Graphics/View.hpp>
@@ -23,7 +24,9 @@ Application::Application()
       nightIntroScreen_(menuFont_, switchSound_),
       officeScreen_(menuFont_, switchSound_),
       nightCompleteScreen_(menuFont_),
-      nightLossScreen_(menuFont_)
+      nightLossScreen_(menuFont_),
+      paycheckScreen_(menuFont_),
+      customNightScreen_(menuFont_)
 {
     window_.setFramerateLimit(60);
 
@@ -39,6 +42,8 @@ Application::Application()
 
 	currentNight_ = progress.currentNight;
 	completedNights_ = progress.completedNights;
+    stars_ = progress.stars;
+    mainMenu_.setStars(stars_);
 
 	mainMenu_.setNight(currentNight_);
 }
@@ -86,7 +91,7 @@ void Application::update(sf::Time elapsed)
 
         if (nightIntroScreen_.isFinished())
         {
-            officeScreen_.startNight(currentNight_);
+            officeScreen_.startNight(playingNight_, customNightScreen_.levels());
             currentScreen_ = Screen::Office;
         }
     }
@@ -96,12 +101,7 @@ void Application::update(sf::Time elapsed)
 
 		if (officeScreen_.hasFinishedNight())
 		{
-			officeScreen_.stopForNightCompletion();
-
-			completeNight();
-
-			nightCompleteScreen_.start();
-			currentScreen_ = Screen::NightComplete;
+			finishNight();
 		}
         else if (const auto attacker = officeScreen_.attacker())
         {
@@ -134,6 +134,7 @@ void Application::update(sf::Time elapsed)
 
 		if (nightCompleteScreen_.isFinished())
 		{
+			nightCompleteScreen_.stop();
 			advanceAfterNight();
 		}
 	}
@@ -152,23 +153,44 @@ void Application::handleMenuAction(MenuAction action)
 			mainMenu_.setNight(currentNight_);
 			saveProgress();
 
-			nightIntroScreen_.start(currentNight_, true);
-			currentScreen_ = Screen::NightIntro;
+			beginNight(currentNight_, true);
 			break;
 
 		case MenuAction::Continue:
 			menuMusic_.stop();
 
-			nightIntroScreen_.start(currentNight_, false);
-			currentScreen_ = Screen::NightIntro;
+			beginNight(currentNight_, false);
 			break;
 			
+        case MenuAction::BonusNight:
+            if (stars_ > 0u)
+            {
+                menuMusic_.stop();
+                beginNight(NightRules::bonus, false);
+            }
+            break;
+
+        case MenuAction::CustomizeNight:
+            if (stars_ >= 2u)
+                currentScreen_ = Screen::CustomNight;
+            break;
+
+        case MenuAction::StartCustomNight:
+            if (currentScreen_ == Screen::CustomNight && stars_ >= 2u)
+            {
+                menuMusic_.stop();
+                beginNight(NightRules::custom, false);
+            }
+            break;
+
         case MenuAction::ShowControls:
             controlsScreen_.resetHover();
             currentScreen_ = Screen::Controls;
             break;
 
         case MenuAction::ReturnToMenu:
+            paycheckScreen_.stop();
+            menuMusic_.play();
             mainMenu_.resetHover();
             currentScreen_ = Screen::MainMenu;
             break;
@@ -194,7 +216,8 @@ void Application::processEvents()
 
         if (const auto* key = event->getIf<sf::Event::KeyPressed>())
         {
-            if (key->scancode == sf::Keyboard::Scancode::Escape)
+            if (key->scancode == sf::Keyboard::Scancode::Escape &&
+                currentScreen_ != Screen::Paycheck && currentScreen_ != Screen::CustomNight)
             {
                 window_.close();
                 return;
@@ -208,9 +231,14 @@ void Application::processEvents()
 				sf::Keyboard::isKeyPressed(Scan::M) &&
 				sf::Keyboard::isKeyPressed(Scan::Slash))
 			{
-				officeScreen_.stopForNightCompletion();
-				completeNight();
-				advanceAfterNight();
+                if (playingNight_ >= NightRules::campaignFinal)
+                    finishNight();
+                else
+                {
+                    officeScreen_.stopForNightCompletion();
+                    completeNight();
+                    advanceAfterNight();
+                }
 				return;
 			}
         }
@@ -220,6 +248,7 @@ void Application::processEvents()
 			menuMusic_.pause();
 			switchSound_.pause();
 			nightCompleteScreen_.pause();
+            paycheckScreen_.pause();
             if (currentScreen_ == Screen::NightLoss)
                 nightLossScreen_.pause();
 		}
@@ -228,6 +257,7 @@ void Application::processEvents()
 			menuMusic_.resume();
 			switchSound_.resume();
 			nightCompleteScreen_.resume();
+            paycheckScreen_.resume();
             if (currentScreen_ == Screen::NightLoss)
                 nightLossScreen_.resume();
 		}
@@ -271,6 +301,14 @@ void Application::render()
             nightLossScreen_.render(window_);
             break;
 
+        case Screen::CustomNight:
+            customNightScreen_.render(window_);
+            break;
+
+        case Screen::Paycheck:
+            paycheckScreen_.render(window_);
+            break;
+
         case Screen::NightComplete:
 		officeScreen_.render(window_);
 		nightCompleteScreen_.render(window_);
@@ -290,6 +328,12 @@ MenuAction Application::handleScreenEvent(const sf::Event& event)
         case Screen::Controls:
             return controlsScreen_.handleEvent(event, window_);
             
+        case Screen::CustomNight:
+            return customNightScreen_.handleEvent(event, window_);
+
+        case Screen::Paycheck:
+            return paycheckScreen_.handleEvent(event, window_);
+
         case Screen::NightIntro:
         case Screen::NightLoss:
         case Screen::NightComplete:
@@ -307,7 +351,8 @@ void Application::saveProgress()
 {
     const GameProgress progress{
         currentNight_,
-        completedNights_
+        completedNights_,
+        stars_
     };
 
     if (!saveGame_.save(progress))
@@ -317,36 +362,56 @@ void Application::saveProgress()
     }
 }
 
+void Application::finishNight()
+{
+    officeScreen_.stopForNightCompletion();
+    completeNight();
+    nightCompleteScreen_.start();
+    currentScreen_ = Screen::NightComplete;
+}
+
 void Application::completeNight()
 {
-    completedNights_ = std::max(
-        completedNights_,
-        currentNight_
-    );
-
-    constexpr unsigned mainNightCount = 5u;
-
-    if (currentNight_ < mainNightCount)
+    if (playingNight_ == NightRules::custom)
     {
-        ++currentNight_;
+        if (NightRules::isMaxDifficulty(customNightScreen_.levels()))
+            stars_ = 3u;
+    }
+    else if (playingNight_ == NightRules::bonus)
+        stars_ = std::max(stars_, 2u);
+    else
+    {
+        completedNights_ = std::max(completedNights_, playingNight_);
+        currentNight_ = std::min(playingNight_ + 1u, NightRules::campaignFinal);
+        if (playingNight_ == NightRules::campaignFinal)
+            stars_ = std::max(stars_, 1u);
     }
 
     mainMenu_.setNight(currentNight_);
+    mainMenu_.setStars(stars_);
     saveProgress();
 }
 
 void Application::advanceAfterNight()
 {
-    constexpr unsigned mainNightCount = 5u;
-
-    if (completedNights_ >= mainNightCount)
+    if (playingNight_ == NightRules::custom && !NightRules::isMaxDifficulty(customNightScreen_.levels()))
     {
-        mainMenu_.resetHover();
-        currentScreen_ = Screen::MainMenu;
-        menuMusic_.play();
+        handleMenuAction(MenuAction::ReturnToMenu);
+        return;
+    }
+    if (playingNight_ >= NightRules::campaignFinal)
+    {
+        paycheckScreen_.start(playingNight_);
+        currentScreen_ = Screen::Paycheck;
         return;
     }
 
-    nightIntroScreen_.start(currentNight_, false);
+    beginNight(currentNight_, false);
+}
+
+void Application::beginNight(unsigned night, bool showNewspaper)
+{
+    playingNight_ = night;
+    nightIntroScreen_.start(night, showNewspaper);
     currentScreen_ = Screen::NightIntro;
 }

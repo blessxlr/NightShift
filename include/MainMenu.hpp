@@ -30,6 +30,7 @@ public:
 	void update(sf::Time elapsed);
 	
 	void setNight(unsigned night);
+    void setStars(unsigned stars);
 	
 private:
 
@@ -46,7 +47,9 @@ private:
     Button newGameButton_;
     Button continueButton_;
     Button controlsButton_;
+    Button bonusNightButton_;
     Button exitButton_;
+    unsigned stars_ = 0u;
     
     bool isButtonHovered_ = false;
 };

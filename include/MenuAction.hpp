@@ -5,7 +5,10 @@ enum class MenuAction
 	None,
 	NewGame,
 	Continue,
+    BonusNight,
 	ShowControls,
 	ReturnToMenu,
-	Exit
+	Exit,
+    CustomizeNight,
+    StartCustomNight
 };

@@ -18,6 +18,7 @@ public:
 		sf::Vector2f size);
 		
 		void render(sf::RenderTarget &target) const;
+        void setPosition(sf::Vector2f position);
 		
 		bool contains(sf::Vector2f point) const;
 		

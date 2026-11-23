@@ -56,6 +56,8 @@ add_executable(NightShift
     src/FoxyMovement.cpp
     src/GoldenFedor.cpp
     src/BlackoutSequence.cpp
+    src/PaycheckScreen.cpp
+    src/CustomNightScreen.cpp
     src/FedorModel.cpp
     src/NightLossScreen.cpp
 )

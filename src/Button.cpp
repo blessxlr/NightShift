@@ -6,7 +6,6 @@
 Button::Button(const sf::Font &font, const sf::String &label, sf::Vector2f position, //
 	sf::Vector2f size) : background_(size), text_(font, label, 32u)
 {
-    background_.setPosition(position);
     background_.setFillColor(sf::Color(30, 30, 30));
     background_.setOutlineThickness(2.f);
     background_.setOutlineColor(sf::Color(90, 90, 90));
@@ -17,7 +16,13 @@ Button::Button(const sf::Font &font, const sf::String &label, sf::Vector2f posit
 
     text_.setOrigin({bounds.position.x, bounds.position.y + bounds.size.y / 2.f});
 
-	text_.setPosition({position.x, position.y + size.y / 2.f});
+    setPosition(position);
+}
+
+void Button::setPosition(sf::Vector2f position)
+{
+    background_.setPosition(position);
+    text_.setPosition({position.x, position.y + background_.getSize().y / 2.f});
 }
 
 void Button::render(sf::RenderTarget& target) const

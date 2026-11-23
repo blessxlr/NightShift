@@ -70,6 +70,12 @@ void NightCompleteScreen::start()
     victorySound_.play();
 }
 
+void NightCompleteScreen::stop()
+{
+    victorySound_.stop();
+    active_ = false;
+}
+
 void NightCompleteScreen::pause()
 {
     if (victorySound_.getStatus() ==

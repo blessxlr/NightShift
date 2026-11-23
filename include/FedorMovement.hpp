@@ -25,7 +25,7 @@ class AnimatronicMovement
 {
 public:
     explicit AnimatronicMovement(AnimatronicKind kind = AnimatronicKind::Fedor);
-    void reset(const BuildingMap& map, unsigned night);
+    void reset(const BuildingMap& map, unsigned night, unsigned customLevel = 0u);
     void update(float seconds, bool doorClosed, unsigned hour = 0u, bool corridorClear = true);
     std::optional<BuildingMap::Point> position() const;
     FedorPose pose() const;

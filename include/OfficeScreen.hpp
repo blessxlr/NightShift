@@ -14,6 +14,7 @@
 #include "OfficeFan.hpp"
 #include "FanSound.hpp"
 #include "NightTimer.hpp"
+#include "NightRules.hpp"
 #include "OfficeAudio.hpp"
 #include "PowerSystem.hpp"
 #include "CameraMonitor.hpp"
@@ -45,7 +46,7 @@ public:
     void handleEvent(const sf::Event& event, const sf::RenderTarget& target);
     void update(sf::Time elapsed);
     void render(sf::RenderTarget& target) const;
-    void startNight(unsigned night);
+    void startNight(unsigned night, const NightRules::Difficulty& levels = {});
     [[nodiscard]] bool hasFinishedNight() const;
     void stopForNightCompletion();
     [[nodiscard]] std::optional<AnimatronicKind> attacker() const;

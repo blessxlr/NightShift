@@ -1,4 +1,5 @@
 #include "SaveGame.hpp"
+#include "NightRules.hpp"
 
 #include <fstream>
 #include <string>
@@ -31,9 +32,15 @@ GameProgress SaveGame::load() const
         return {};
     }
 
-    if (signature != "NightShift" ||
-        version != 1u ||
-        !isValid(progress))
+    if (signature != "NightShift" || (version != 1u && version != 2u))
+        return {};
+
+    if (version == 1u)
+        progress.stars = progress.completedNights == NightRules::campaignFinal ? 1u : 0u;
+    else if (!(input >> progress.stars))
+        return {};
+
+    if (!isValid(progress))
     {
         return {};
     }
@@ -76,9 +83,9 @@ bool SaveGame::save(const GameProgress& progress) const
             return false;
         }
 
-        output << "NightShift 1\n"
+        output << "NightShift 2\n"
                << progress.currentNight << ' '
-               << progress.completedNights << '\n';
+               << progress.completedNights << ' ' << progress.stars << '\n';
 
         output.close();
 
@@ -95,11 +102,12 @@ bool SaveGame::save(const GameProgress& progress) const
 
 bool SaveGame::isValid(const GameProgress& progress)
 {
-    constexpr unsigned mainNightCount = 5u;
+    constexpr unsigned mainNightCount = NightRules::campaignFinal;
 
     if (progress.currentNight < 1u ||
         progress.currentNight > mainNightCount ||
-        progress.completedNights > mainNightCount)
+        progress.completedNights > mainNightCount || progress.stars > 3u ||
+        (progress.completedNights == mainNightCount && progress.stars == 0u))
     {
         return false;
     }

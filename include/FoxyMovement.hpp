@@ -7,8 +7,8 @@ class FoxyMovement
 public:
     enum class Stage { Resting, Standing, Ready, LeavingWorkshop, WaitingInHall, Running, AtDoor };
 
-    void reset(const BuildingMap& map, unsigned night);
-    void update(float seconds, bool watched, bool doorClosed);
+    void reset(const BuildingMap& map, unsigned night, unsigned customLevel = 0u);
+    void update(float seconds, bool watched, bool doorClosed, unsigned hour = 0u);
 
     Stage stage() const { return stage_; }
     std::optional<BuildingMap::Point> position() const { return position_; }
@@ -37,6 +37,7 @@ private:
     std::size_t officeEntrance_ = 0;
     std::size_t waypoint_ = 1;
     unsigned night_ = 0;
+    unsigned customLevel_ = 0;
     std::size_t blockedAttacks_ = 0;
     unsigned blockedCost_ = 0;
     float remaining_ = 0.f;

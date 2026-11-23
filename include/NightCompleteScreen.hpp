@@ -17,6 +17,7 @@ public:
     explicit NightCompleteScreen(const sf::Font& font);
 
     void start();
+    void stop();
     void pause();
 	void resume();
     void update(sf::Time elapsed);

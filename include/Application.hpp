@@ -10,6 +10,8 @@
 #include "NightCompleteScreen.hpp"
 #include "NightLossScreen.hpp"
 #include "SaveGame.hpp"
+#include "PaycheckScreen.hpp"
+#include "CustomNightScreen.hpp"
 
 #include <SFML/Graphics/Font.hpp>
 #include <SFML/Graphics/Texture.hpp>
@@ -34,6 +36,8 @@ private:
         Controls,
         NightIntro,
         NightComplete,
+        Paycheck,
+        CustomNight,
         NightLoss,
         Office
     };
@@ -56,6 +60,10 @@ private:
     OfficeScreen officeScreen_;
     NightCompleteScreen nightCompleteScreen_;
     NightLossScreen nightLossScreen_;
+    PaycheckScreen paycheckScreen_;
+    CustomNightScreen customNightScreen_;
+    unsigned playingNight_ = 1u;
+    unsigned stars_ = 0u;
 	unsigned currentNight_ = 1u;
 	unsigned completedNights_ = 0u;
 
@@ -64,5 +72,7 @@ private:
     void update(sf::Time elapsed);
     void saveProgress();
 	void completeNight();
+    void finishNight();
 	void advanceAfterNight();
+    void beginNight(unsigned night, bool showNewspaper);
 };
