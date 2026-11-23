@@ -87,7 +87,7 @@ private:
     mutable FedorModel goldenModel_{false, AnimatronicKind::GoldenFedor};
     mutable FedorModel corridorFoxy_{false, AnimatronicKind::Foxy};
     AnimatronicMovement chica_{AnimatronicKind::Chica};
-    mutable FedorModel corridorFedor_;
+    mutable FedorModel blackoutFedor_;
     mutable FedorModel corridorBonny_{false, AnimatronicKind::Bonny};
     mutable FedorModel corridorChica_{false, AnimatronicKind::Chica};
     OfficeAudio officeAudio_;

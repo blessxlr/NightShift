@@ -457,7 +457,8 @@ void OfficeScreen::update(sf::Time elapsed)
                 tablet = GoldenFedor::Tablet::Moving;
             goldenFedor_.update(elapsed.asSeconds(), tablet);
         }
-        cameraMonitor_.setFedorPosition(fedor_.position(), fedor_.pose());
+        const auto visibleFedorPosition = fedor_.officeApproach() ? std::nullopt : fedor_.position();
+        cameraMonitor_.setFedorPosition(visibleFedorPosition, fedor_.pose());
         cameraMonitor_.setBonnyPosition(bonny_.position(), bonny_.pose());
         cameraMonitor_.setChicaPosition(chica_.position(), chica_.pose());
         cameraMonitor_.setFoxyPosition(foxy_.position(), foxy_.pose());
@@ -534,10 +535,7 @@ void OfficeScreen::render(sf::RenderTarget& target) const
 
         lighting_.renderRoom(target, roomImage_);
     }
-    if (bonny_.officeApproach())
-        drawInCorridor(target, bonny_, corridorBonny_);
-    else
-        drawInCorridor(target, fedor_, corridorFedor_);
+    drawInCorridor(target, bonny_, corridorBonny_);
     if (foxy_.officeApproach())
         drawInCorridor(target, foxy_, corridorFoxy_, true);
     else
@@ -740,7 +738,7 @@ void OfficeScreen::drawBlackoutFedor(sf::RenderTarget& target) const
     const auto bottom = (corners[3] + corners[2]) / 2.f;
     const auto center = top + (bottom - top) * 0.36f;
 
-    const auto& image = corridorFedor_.render({}, -0.16f);
+    const auto& image = blackoutFedor_.render({}, -0.16f);
     const float width = (corners[1].x - corners[0].x) * 0.71f;
     const float height = width * 0.59f;
     const auto tl = center - sf::Vector2f{width / 2.f, height / 2.f};
