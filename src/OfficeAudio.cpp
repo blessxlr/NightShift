@@ -1,10 +1,17 @@
 #include "OfficeAudio.hpp"
+#include "FedorMovement.hpp"
 
+#include <SFML/Audio/SoundChannel.hpp>
+
+#include <algorithm>
 #include <array>
+#include <cstdint>
 #include <utility>
 
 namespace
 {
+constexpr float maxPan = 0.94f;
+
 struct AmbientTrack
 {
     const char* path;
@@ -30,66 +37,106 @@ std::size_t chooseTrack(std::size_t count, std::optional<std::size_t>& previous,
 }
 }
 
-OfficeAudio::CuePool::CuePool(std::initializer_list<const char*> paths, float volume, float pan)
-    : volume_(volume),
-      pan_(pan)
+OfficeAudio::CuePool::CuePool(std::initializer_list<const char*> paths, float volume)
+    : volume_(volume)
 {
     samples_.reserve(paths.size());
     for (const auto path : paths)
     {
         sf::SoundBuffer sample;
-        if (sample.loadFromFile(path))
-            samples_.push_back(std::move(sample));
+        if (!sample.loadFromFile(path))
+            continue;
+
+        const auto channels = sample.getChannelCount();
+        if (channels > 1u)
+        {
+            const auto* source = sample.getSamples();
+            std::vector<std::int16_t> mono(sample.getSampleCount() / channels);
+            for (std::size_t frame = 0; frame < mono.size(); ++frame)
+            {
+                std::int32_t sum = 0;
+                for (unsigned channel = 0; channel < channels; ++channel)
+                    sum += source[frame * channels + channel];
+                mono[frame] = static_cast<std::int16_t>(sum / static_cast<std::int32_t>(channels));
+            }
+            if (!sample.loadFromSamples(mono.data(), mono.size(), 1u, sample.getSampleRate(),
+                                        {sf::SoundChannel::Mono}))
+                continue;
+        }
+        samples_.push_back(std::move(sample));
     }
 }
 
-void OfficeAudio::CuePool::play(std::mt19937& random, std::optional<float> pan)
+void OfficeAudio::CuePool::play(std::mt19937& random, float pan, std::size_t voice)
 {
     if (samples_.empty())
         return;
 
     const auto index = chooseTrack(samples_.size(), lastSample_, random);
-    player_.emplace(samples_[index]);
-    player_->setVolume(volume_);
-    player_->setSpatializationEnabled(false);
-    player_->setPan(pan.value_or(pan_));
-    player_->play();
+    auto& player = players_[voice].emplace(samples_[index]);
+    player.setVolume(volume_);
+    player.setSpatializationEnabled(false);
+    player.setPan(pan);
+    player.play();
+}
+
+void OfficeAudio::CuePool::setPan(float pan)
+{
+    auto& player = players_.front();
+    if (player && player->getPan() != pan)
+        player->setPan(pan);
 }
 
 void OfficeAudio::CuePool::pause()
 {
-    if (player_)
-        player_->pause();
+    for (auto& player : players_)
+        if (player && player->getStatus() == sf::SoundSource::Status::Playing)
+            player->pause();
 }
 
 void OfficeAudio::CuePool::resume()
 {
-    if (player_ && player_->getStatus() == sf::SoundSource::Status::Paused)
-        player_->play();
+    for (auto& player : players_)
+        if (player && player->getStatus() == sf::SoundSource::Status::Paused)
+            player->play();
 }
 
 void OfficeAudio::CuePool::stop()
 {
-    player_.reset();
+    for (auto& player : players_)
+        player.reset();
     lastSample_.reset();
 }
 
 OfficeAudio::OfficeAudio()
     : steps_({"assets/audio/fedor-move-1.mp3", "assets/audio/fedor-move-2.mp3",
               "assets/audio/fedor-move-3.mp3", "assets/audio/fedor-move-4.mp3",
-              "assets/audio/fedor-move-5.mp3"}, 51.f, 0.f),
-      bonnySteps_({"assets/audio/bonny-footsteps.wav"}, 56.f, -0.36f),
-      chicaSteps_({"assets/audio/chica-footsteps.wav"}, 56.f, 0.36f),
-      kitchen_({"assets/audio/chica-kitchen.wav"}, 64.f, 0.68f),
-      sprint_({"assets/audio/foxy-run.mp3"}, 60.f, 0.5f),
+              "assets/audio/fedor-move-5.mp3"}, 51.f),
+      bonnySteps_({"assets/audio/bonny-footsteps.wav"}, 56.f),
+      chicaSteps_({"assets/audio/chica-footsteps.wav"}, 56.f),
+      kitchen_({"assets/audio/chica-kitchen.wav"}, 64.f),
+      sprint_({"assets/audio/foxy-run.mp3"}, 60.f),
       knocks_({"assets/audio/fedor-knock-1.mp3", "assets/audio/fedor-knock-2.mp3",
-               "assets/audio/fedor-knock-3.mp3"}, 63.f, -0.58f)
+               "assets/audio/fedor-knock-3.mp3"}, 63.f)
 {
 }
 
-void OfficeAudio::startNight()
+void OfficeAudio::startNight(const BuildingMap& map)
 {
     stop();
+
+    const auto left = map.navigationPoints.find("left_door");
+    const auto right = map.navigationPoints.find("right_door");
+    float leftX = map.office ? map.office->x1 : 0.f;
+    float rightX = map.office ? map.office->x2 : 0.f;
+    if (left != map.navigationPoints.end() && right != map.navigationPoints.end() &&
+        left->second.x < right->second.x)
+    {
+        leftX = left->second.x;
+        rightX = right->second.x;
+    }
+    centerX_ = (leftX + rightX) / 2.f;
+    halfWidth_ = (rightX - leftX) / 2.f;
     ambienceDelay_ = std::uniform_real_distribution<float>(18.f, 36.f)(random_);
 }
 
@@ -111,34 +158,42 @@ void OfficeAudio::update(sf::Time elapsed)
     ambienceDelay_ = std::uniform_real_distribution<float>(25.f, 50.f)(random_);
 }
 
-void OfficeAudio::playFedorMove()
+void OfficeAudio::updateMovement(AnimatronicKind kind,
+                                 std::optional<BuildingMap::Point> position, bool started)
 {
-    steps_.play(random_);
-}
+    if (!position)
+        return;
 
-void OfficeAudio::playBonnyMove()
-{
-    bonnySteps_.play(random_);
-}
+    CuePool* cue = nullptr;
+    switch (kind)
+    {
+        case AnimatronicKind::Fedor: cue = &steps_; break;
+        case AnimatronicKind::Bonny: cue = &bonnySteps_; break;
+        case AnimatronicKind::Chica: cue = &chicaSteps_; break;
+        case AnimatronicKind::Foxy: cue = &sprint_; break;
+        case AnimatronicKind::GoldenFedor: return;
+    }
+    if (!cue)
+        return;
 
-void OfficeAudio::playChicaMove()
-{
-    chicaSteps_.play(random_);
-}
-
-void OfficeAudio::playFoxySprint()
-{
-    sprint_.play(random_);
+    const float pan = halfWidth_ > 0.f
+        ? maxPan * std::clamp((position->x - centerX_) / halfWidth_, -1.f, 1.f)
+        : 0.f;
+    if (started)
+        cue->play(random_, pan);
+    else
+        cue->setPan(pan);
 }
 
 void OfficeAudio::playKitchenVisit()
 {
-    kitchen_.play(random_);
+    kitchen_.play(random_, 0.68f);
 }
 
-void OfficeAudio::playDoorKnock(bool rightSide)
+void OfficeAudio::playDoorKnock(Side side)
 {
-    knocks_.play(random_, rightSide ? 0.58f : -0.58f);
+    const bool onRight = side == Side::Right;
+    knocks_.play(random_, onRight ? maxPan : -maxPan, onRight ? 1u : 0u);
 }
 
 void OfficeAudio::pause()

@@ -1,28 +1,32 @@
 #pragma once
 
+#include "BuildingMap.hpp"
+
 #include <SFML/Audio/Music.hpp>
 #include <SFML/Audio/Sound.hpp>
 #include <SFML/Audio/SoundBuffer.hpp>
 #include <SFML/System/Time.hpp>
 
+#include <array>
 #include <initializer_list>
 #include <optional>
 #include <random>
 #include <vector>
+
+enum class AnimatronicKind;
 
 class OfficeAudio
 {
 public:
     OfficeAudio();
 
-    void startNight();
+    enum class Side { Left, Right };
+
+    void startNight(const BuildingMap& map);
     void update(sf::Time elapsed);
-    void playFedorMove();
-    void playBonnyMove();
-    void playChicaMove();
+    void updateMovement(AnimatronicKind kind, std::optional<BuildingMap::Point> position, bool started);
     void playKitchenVisit();
-    void playFoxySprint();
-    void playDoorKnock(bool rightSide = false);
+    void playDoorKnock(Side side);
     void pause();
     void resume();
     void stop();
@@ -32,18 +36,19 @@ private:
     class CuePool
     {
     public:
-        CuePool(std::initializer_list<const char*> paths, float volume, float pan);
-        void play(std::mt19937& random, std::optional<float> pan = std::nullopt);
+        CuePool(std::initializer_list<const char*> paths, float volume);
+        void play(std::mt19937& random, float pan, std::size_t voice = 0u);
+        void setPan(float pan);
         void pause();
         void resume();
         void stop();
 
     private:
         std::vector<sf::SoundBuffer> samples_;
-        std::optional<sf::Sound> player_;
+        std::array<std::optional<sf::Sound>, 2> players_;
         std::optional<std::size_t> lastSample_;
         float volume_;
-        float pan_;
+
     };
 
     CuePool steps_;
@@ -55,5 +60,7 @@ private:
     sf::Music ambience_;
     std::mt19937 random_{std::random_device{}()};
     std::optional<std::size_t> lastAmbience_;
+    float centerX_ = 0.f;
+    float halfWidth_ = 0.f;
     float ambienceDelay_ = 0.f;
 };

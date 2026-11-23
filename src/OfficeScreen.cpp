@@ -440,8 +440,6 @@ void OfficeScreen::update(sf::Time elapsed)
         const bool rightClosed = rightDoor_.isClosed();
         foxy_.update(elapsed.asSeconds(), cameraMonitor_.isWatching(6u), rightClosed, hour);
         chica_.update(elapsed.asSeconds(), rightClosed, hour, !foxy_.officeApproach());
-        if (foxy_.startedSprint())
-            officeAudio_.playFoxySprint();
         if (foxy_.blockedCost() > 0)
         {
             power_.consume(foxy_.blockedCost());
@@ -463,18 +461,19 @@ void OfficeScreen::update(sf::Time elapsed)
         cameraMonitor_.setBonnyPosition(bonny_.position(), bonny_.pose());
         cameraMonitor_.setChicaPosition(chica_.position(), chica_.pose());
         cameraMonitor_.setFoxyPosition(foxy_.position(), foxy_.pose());
-        if (fedor_.startedStep())
-            officeAudio_.playFedorMove();
-        if (bonny_.startedStep())
-            officeAudio_.playBonnyMove();
-        if (chica_.startedStep())
-            officeAudio_.playChicaMove();
-        if (chica_.startedKitchenVisit())
+        if (powered)
+        {
+            officeAudio_.updateMovement(AnimatronicKind::Fedor, fedor_.position(), fedor_.startedStep());
+            officeAudio_.updateMovement(AnimatronicKind::Bonny, bonny_.position(), bonny_.startedStep());
+            officeAudio_.updateMovement(AnimatronicKind::Chica, chica_.position(), chica_.startedStep());
+            officeAudio_.updateMovement(AnimatronicKind::Foxy, foxy_.position(), foxy_.startedSprint());
+        }
+        if (powered && chica_.startedKitchenVisit())
             officeAudio_.playKitchenVisit();
         if (fedor_.retreatedFromDoor() || bonny_.retreatedFromDoor())
-            officeAudio_.playDoorKnock();
+            officeAudio_.playDoorKnock(OfficeAudio::Side::Left);
         if (chica_.retreatedFromDoor() || foxy_.blockedCost() > 0)
-            officeAudio_.playDoorKnock(true);
+            officeAudio_.playDoorKnock(OfficeAudio::Side::Right);
         if (powered)
             officeAudio_.update(elapsed);
     }
@@ -573,7 +572,7 @@ void OfficeScreen::render(sf::RenderTarget& target) const
 
 void OfficeScreen::startNight(unsigned night, const NightRules::Difficulty& levels)
 {
-    officeAudio_.startNight();
+    officeAudio_.startNight(cameraMonitor_.buildingMap());
 	tabletHandle_.reset();
 	nightLabel_.setString(L"Ночь " + std::to_wstring(night));
 
