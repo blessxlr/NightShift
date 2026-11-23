@@ -438,9 +438,8 @@ void OfficeScreen::update(sf::Time elapsed)
         fedor_.update(elapsed.asSeconds(), leftClosed, hour, !bonny_.officeApproach());
         bonny_.update(elapsed.asSeconds(), leftClosed, hour, !fedor_.officeApproach());
         const bool rightClosed = rightDoor_.isClosed();
+        foxy_.update(elapsed.asSeconds(), cameraMonitor_.isWatching(6u), rightClosed);
         chica_.update(elapsed.asSeconds(), rightClosed, hour, !foxy_.officeApproach());
-        foxy_.update(elapsed.asSeconds(), cameraMonitor_.isWatching(6u),
-                     rightClosed, !chica_.officeApproach());
         if (foxy_.startedSprint())
             officeAudio_.playFoxySprint();
         if (foxy_.blockedCost() > 0)

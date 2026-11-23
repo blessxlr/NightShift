@@ -2,15 +2,13 @@
 
 #include "FedorMovement.hpp"
 
-#include <array>
-
 class FoxyMovement
 {
 public:
-    enum class Stage { Resting, Standing, Ready, Running };
+    enum class Stage { Resting, Standing, Ready, LeavingWorkshop, WaitingInHall, Running, AtDoor };
 
     void reset(const BuildingMap& map, unsigned night);
-    void update(float seconds, bool watched, bool doorClosed, bool approachClear);
+    void update(float seconds, bool watched, bool doorClosed);
 
     Stage stage() const { return stage_; }
     std::optional<BuildingMap::Point> position() const { return position_; }
@@ -24,19 +22,22 @@ public:
 private:
     using Point = BuildingMap::Point;
     void returnHome();
-    float advance(const std::vector<Point>& path, float distance);
+    void advance(const std::vector<Point>& path, float distance);
+    void sprint(float seconds);
     float stageDelay();
 
-    std::array<std::vector<Point>, 3> legs_;
+    std::vector<Point> readyPath_;
+    std::vector<Point> hallPath_;
+    std::vector<Point> sprintPath_;
     std::optional<Point> position_;
     Point home_{};
     Point camera_{};
     FedorPose pose_{};
     Stage stage_ = Stage::Resting;
-    std::size_t leg_ = 0;
+    std::size_t officeEntrance_ = 0;
     std::size_t waypoint_ = 1;
     unsigned night_ = 0;
-    unsigned nextCost_ = 1;
+    std::size_t blockedAttacks_ = 0;
     unsigned blockedCost_ = 0;
     float remaining_ = 0.f;
     float approachLength_ = 0.f;

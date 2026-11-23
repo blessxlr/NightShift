@@ -64,6 +64,7 @@ point chica_right_approach 169 248
 point left_door 77 288
 point foxy_rest 231 178
 point foxy_ready 219 150
+point foxy_corridor_wait 176 153
 point foxy_right_approach 169 239
 point right_door 164 288
 

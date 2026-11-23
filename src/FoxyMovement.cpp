@@ -2,12 +2,17 @@
 #include "RoutePlanner.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace
 {
 using Point = BuildingMap::Point;
 constexpr float tau = 6.2831853f;
+constexpr float hallWarning = 7.f;
+constexpr float doorWait = 5.f;
+constexpr float sprintSpeed = 60.f;
+constexpr std::array<unsigned, 4> blockedCosts{2u, 3u, 4u, 6u};
 
 float distance(Point a, Point b)
 {
@@ -34,7 +39,6 @@ void FoxyMovement::returnHome()
     pose_.rest = 1.f;
     stage_ = Stage::Resting;
     remaining_ = stageDelay();
-    leg_ = 0;
     waypoint_ = 1;
     approachWalked_ = 0.f;
 }
@@ -42,10 +46,11 @@ void FoxyMovement::returnHome()
 void FoxyMovement::reset(const BuildingMap& map, unsigned night)
 {
     night_ = std::clamp(night, 1u, 5u);
-    nextCost_ = 1;
-    blockedCost_ = 0;
+    blockedAttacks_ = blockedCost_ = 0;
     attacked_ = startedSprint_ = mobile_ = false;
-    legs_ = {};
+    readyPath_.clear();
+    hallPath_.clear();
+    sprintPath_.clear();
     stage_ = Stage::Resting;
     approachLength_ = 0.f;
     position_.reset();
@@ -59,26 +64,41 @@ void FoxyMovement::reset(const BuildingMap& map, unsigned night)
     if (night_ < 2)
         return;
 
-    Point from = home_;
-    constexpr std::array goals{"foxy_ready", "foxy_right_approach", "right_door"};
-    for (std::size_t i = 0; i < goals.size(); ++i)
+    const auto ready = map.navigationPoints.find("foxy_ready");
+    const auto hall = map.navigationPoints.find("foxy_corridor_wait");
+    const auto approach = map.navigationPoints.find("foxy_right_approach");
+    const auto door = map.navigationPoints.find("right_door");
+    if (ready == map.navigationPoints.end() || approach == map.navigationPoints.end() ||
+        door == map.navigationPoints.end())
+        return;
+
+    const Point waitingPoint = hall == map.navigationPoints.end()
+        ? approach->second : hall->second;
+    readyPath_ = findApproachRoute(map, home_, ready->second);
+    hallPath_ = findApproachRoute(map, ready->second, waitingPoint);
+    const auto finalPath = findApproachRoute(map, approach->second, door->second);
+    if (readyPath_.size() < 2 || hallPath_.size() < 2 || finalPath.size() < 2)
+        return;
+
+    if (distance(waitingPoint, approach->second) == 0.f)
+        sprintPath_.push_back(waitingPoint);
+    else
+        sprintPath_ = findApproachRoute(map, waitingPoint, approach->second);
+    if (sprintPath_.empty())
+        return;
+
+    officeEntrance_ = sprintPath_.size();
+    for (std::size_t i = 1; i < finalPath.size(); ++i)
     {
-        const auto goal = map.navigationPoints.find(goals[i]);
-        if (goal == map.navigationPoints.end())
-            return;
-        legs_[i] = findApproachRoute(map, from, goal->second);
-        if (legs_[i].size() < 2)
-            return;
-        doorYaw_ = heading(from, goal->second);
-        from = goal->second;
+        sprintPath_.push_back(finalPath[i]);
+        approachLength_ += distance(finalPath[i - 1], finalPath[i]);
     }
-    const auto& approach = legs_.back();
-    for (std::size_t i = 1; i < approach.size(); ++i)
-        approachLength_ += distance(approach[i - 1], approach[i]);
+
+    doorYaw_ = heading(approach->second, door->second);
     mobile_ = approachLength_ > 0.f;
 }
 
-float FoxyMovement::advance(const std::vector<Point>& path, float budget)
+void FoxyMovement::advance(const std::vector<Point>& path, float budget)
 {
     float moved = 0.f;
     while (waypoint_ < path.size() && budget > 0.f)
@@ -94,6 +114,8 @@ float FoxyMovement::advance(const std::vector<Point>& path, float budget)
             current.x += (goal.x - current.x) * step / length;
             current.y += (goal.y - current.y) * step / length;
         }
+        if (stage_ == Stage::Running && waypoint_ >= officeEntrance_)
+            approachWalked_ += step;
         moved += step;
         budget -= step;
         if (step == length)
@@ -104,64 +126,82 @@ float FoxyMovement::advance(const std::vector<Point>& path, float budget)
     }
     pose_.phase = std::fmod(pose_.phase + moved * 0.32f, tau);
     pose_.stride = moved > 0.f ? 1.f : 0.f;
-    return moved;
 }
 
-void FoxyMovement::update(float seconds, bool watched, bool doorClosed, bool approachClear)
+void FoxyMovement::sprint(float seconds)
+{
+    advance(sprintPath_, seconds * sprintSpeed);
+    if (waypoint_ == sprintPath_.size())
+    {
+        stage_ = Stage::AtDoor;
+        remaining_ = doorWait;
+        pose_.yaw = doorYaw_;
+        pose_.stride = 0.f;
+    }
+}
+
+void FoxyMovement::update(float seconds, bool watched, bool doorClosed)
 {
     blockedCost_ = 0;
     startedSprint_ = false;
     if (!mobile_ || attacked_ || seconds <= 0.f)
         return;
 
-    if (leg_ == legs_.size())
+    switch (stage_)
     {
-        remaining_ -= seconds;
-        if (remaining_ <= 0.f)
-        {
-            if (doorClosed)
+        case Stage::AtDoor:
+            remaining_ -= seconds;
+            if (remaining_ <= 0.f)
             {
-                blockedCost_ = nextCost_;
-                nextCost_ = std::min(8u, nextCost_ * 2u);
-                returnHome();
+                if (doorClosed)
+                {
+                    blockedCost_ = blockedCosts[blockedAttacks_];
+                    blockedAttacks_ = std::min(blockedAttacks_ + 1, blockedCosts.size() - 1);
+                    returnHome();
+                }
+                else
+                    attacked_ = true;
             }
-            else
-                attacked_ = true;
-        }
-        return;
-    }
+            return;
 
-    if (stage_ == Stage::Running)
-    {
-        if (leg_ == 1 && waypoint_ == legs_[1].size())
-        {
-            pose_.stride = 0.f;
-            if (!approachClear)
-                return;
-            ++leg_;
-            waypoint_ = 1;
-        }
-        const float moved = advance(legs_[leg_], seconds * 60.f);
-        if (leg_ == 2)
-        {
-            approachWalked_ += moved;
-            if (waypoint_ == legs_[2].size())
+        case Stage::Running:
+            sprint(seconds);
+            return;
+
+        case Stage::LeavingWorkshop:
+            advance(hallPath_, seconds * 12.f);
+            if (waypoint_ == hallPath_.size())
             {
-                ++leg_;
-                remaining_ = 5.f;
-                pose_.yaw = doorYaw_;
+                stage_ = Stage::WaitingInHall;
+                remaining_ = hallWarning;
+                pose_.yaw = heading(*position_, sprintPath_[1]);
                 pose_.stride = 0.f;
             }
-        }
-        return;
-    }
+            return;
 
-    if (stage_ != Stage::Resting)
-        pose_.rest = std::max(0.f, pose_.rest - seconds * 0.65f);
-    if (stage_ == Stage::Ready && waypoint_ < legs_[0].size())
-    {
-        advance(legs_[0], seconds * 12.f);
-        return;
+        case Stage::WaitingInHall:
+            remaining_ -= seconds;
+            if (remaining_ <= 0.f)
+            {
+                stage_ = Stage::Running;
+                waypoint_ = 1;
+                startedSprint_ = true;
+                sprint(-remaining_);
+            }
+            return;
+
+        case Stage::Standing:
+        case Stage::Ready:
+            pose_.rest = std::max(0.f, pose_.rest - seconds * 0.65f);
+            if (stage_ == Stage::Ready && waypoint_ < readyPath_.size())
+            {
+                advance(readyPath_, seconds * 12.f);
+                return;
+            }
+            break;
+
+        case Stage::Resting:
+            break;
     }
 
     pose_.stride = 0.f;
@@ -171,23 +211,28 @@ void FoxyMovement::update(float seconds, bool watched, bool doorClosed, bool app
     if (remaining_ > 0.f)
         return;
 
-    remaining_ = stageDelay();
     if (stage_ == Stage::Resting)
+    {
         stage_ = Stage::Standing;
+        remaining_ = stageDelay();
+    }
     else if (stage_ == Stage::Standing)
+    {
         stage_ = Stage::Ready;
+        remaining_ = stageDelay();
+    }
     else
     {
-        stage_ = Stage::Running;
-        leg_ = 1;
+        stage_ = Stage::LeavingWorkshop;
         waypoint_ = 1;
-        startedSprint_ = true;
     }
 }
 
 std::optional<float> FoxyMovement::officeApproach() const
 {
-    if (!mobile_ || stage_ != Stage::Running || leg_ < 2)
-        return std::nullopt;
-    return std::clamp(approachWalked_ / approachLength_, 0.f, 1.f);
+    if (stage_ == Stage::AtDoor)
+        return 1.f;
+    if (stage_ == Stage::Running && waypoint_ >= officeEntrance_)
+        return std::clamp(approachWalked_ / approachLength_, 0.f, 1.f);
+    return std::nullopt;
 }
