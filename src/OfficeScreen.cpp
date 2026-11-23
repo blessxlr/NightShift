@@ -485,7 +485,7 @@ void OfficeScreen::render(sf::RenderTarget& target) const
 
     target.setView(previousView);
     
-    cameraMonitor_.render(target, fedor_.position());
+    cameraMonitor_.render(target);
     if (power_.hasPower() && !cameraMonitor_.tabletInMotion())
     tabletHandle_.render(target, tabletHudView, cameraMonitor_.tabletBarIsOpen());
     

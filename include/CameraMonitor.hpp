@@ -29,8 +29,7 @@ public:
     void lower();
     void reset();
     void update(sf::Time elapsed);
-    void render(sf::RenderTarget& target,
-            std::optional<BuildingMap::Point> fedor = std::nullopt) const;
+    void render(sf::RenderTarget& target) const;
 	const BuildingMap& buildingMap() const
 	{
 		return map_;

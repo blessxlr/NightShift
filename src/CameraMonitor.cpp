@@ -345,9 +345,32 @@ void CameraMonitor::renderSelectedFeed(sf::RenderTarget& target) const
     sf::RenderStates states;
     states.texture = &feed.texture;
     const auto& fedor = fedorPosition_;
-    if (fedor && actorReady_ && feed.depth.getSize() == feed.texture.getSize())
-    target.draw(strip.data(), strip.size(), sf::PrimitiveType::TriangleStrip, states);
-}
+
+	if (fedor && actorReady_ && feed.depth.getSize() == feed.texture.getSize())
+	{
+		const auto sprite = fedorTexture_.getSize();
+		const auto actor = projectCameraActor(
+			map_.cameras[selectedFeed_],
+			projection,
+			feed.texture.getSize(),
+			*fedor,
+			static_cast<float>(sprite.x) / sprite.y
+		);
+
+		if (actor)
+		{
+			const auto& uv = actor->uv;
+			actorShader_.setUniform("sceneDepth", feed.depth);
+			actorShader_.setUniform("actorRect", sf::Glsl::Vec4{
+				uv.position.x, uv.position.y, uv.size.x, uv.size.y
+			});
+			actorShader_.setUniform("actorDepth", actor->depth);
+			states.shader = &actorShader_;
+		}
+	}
+
+	target.draw(strip.data(), strip.size(), sf::PrimitiveType::TriangleStrip, states);
+	}
 
 void CameraMonitor::playSignalTransition()
 {
@@ -431,8 +454,7 @@ bool CameraMonitor::isRaised() const
     return wantsOpen_ || progress_ > 0.f;
 }
 
-void CameraMonitor::render(sf::RenderTarget& target,
-                           std::optional<BuildingMap::Point> fedor) const
+void CameraMonitor::render(sf::RenderTarget& target) const
 {
     if (progress_ <= 0.f)
     {
