@@ -525,7 +525,7 @@ void OfficeScreen::startNight(unsigned night)
 	power_.reset();
 	cameraMonitor_.reset();
 	
-	fedor_.reset(cameraMonitor_.buildingMap());
+	fedor_.reset(cameraMonitor_.buildingMap(), night);
 	cameraMonitor_.setFedorPosition(fedor_.position());
 	
 	lighting_.setBlackout(false);

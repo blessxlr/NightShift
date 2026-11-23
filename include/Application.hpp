@@ -62,4 +62,5 @@ private:
     void update(sf::Time elapsed);
     void saveProgress();
 	void completeNight();
+	void advanceAfterNight();
 };

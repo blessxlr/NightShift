@@ -9,7 +9,7 @@ namespace
 {
 using Point = BuildingMap::Point;
 constexpr float cellSize = 2.f;
-constexpr float wallClearance = 4.f;
+constexpr float wallClearance = 6.f;
 
 bool isWalkable(const BuildingMap& map, Point point)
 {

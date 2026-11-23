@@ -50,6 +50,9 @@ wall 85 298 85 309
 wall 155 298 155 309
 
 point fedor_spawn 100 26
+point fedor_hall 100 128
+point fedor_dining 73 179
+point fedor_left_approach 74 255
 point left_door 77 288
 
 link 1 2

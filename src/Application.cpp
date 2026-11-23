@@ -114,23 +114,7 @@ void Application::update(sf::Time elapsed)
 
 		if (nightCompleteScreen_.isFinished())
 		{
-			constexpr unsigned mainNightCount = 5u;
-
-			if (completedNights_ >= mainNightCount)
-			{
-				mainMenu_.resetHover();
-				currentScreen_ = Screen::MainMenu;
-				menuMusic_.play();
-			}
-			else
-			{
-				nightIntroScreen_.start(
-					currentNight_,
-					false
-				);
-
-				currentScreen_ = Screen::NightIntro;
-			}
+			advanceAfterNight();
 		}
 	}
 }
@@ -195,6 +179,20 @@ void Application::processEvents()
                 window_.close();
                 return;
             }
+            using Scan = sf::Keyboard::Scancode;
+			const auto pressed = key->scancode;
+			const bool skipKey = pressed == Scan::N || pressed == Scan::M || pressed == Scan::Slash;
+
+			if (currentScreen_ == Screen::Office && window_.hasFocus() && skipKey &&
+				sf::Keyboard::isKeyPressed(Scan::N) &&
+				sf::Keyboard::isKeyPressed(Scan::M) &&
+				sf::Keyboard::isKeyPressed(Scan::Slash))
+			{
+				officeScreen_.stopForNightCompletion();
+				completeNight();
+				advanceAfterNight();
+				return;
+			}
         }
 
 		if (event->is<sf::Event::FocusLost>())
@@ -303,4 +301,20 @@ void Application::completeNight()
 
     mainMenu_.setNight(currentNight_);
     saveProgress();
+}
+
+void Application::advanceAfterNight()
+{
+    constexpr unsigned mainNightCount = 5u;
+
+    if (completedNights_ >= mainNightCount)
+    {
+        mainMenu_.resetHover();
+        currentScreen_ = Screen::MainMenu;
+        menuMusic_.play();
+        return;
+    }
+
+    nightIntroScreen_.start(currentNight_, false);
+    currentScreen_ = Screen::NightIntro;
 }
