@@ -50,6 +50,8 @@ add_executable(NightShift
 	src/CameraMonitor.cpp
 	src/BuildingMap.cpp
 	src/CameraFeed.cpp
+	src/RoutePlanner.cpp
+	src/FedorMovement.cpp
 )
 
 target_include_directories(NightShift PRIVATE

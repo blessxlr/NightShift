@@ -1,5 +1,6 @@
 #include "BuildingMap.hpp"
 
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -40,6 +41,19 @@ BuildingMap BuildingMap::load(const std::filesystem::path& path)
                     !camera.name.empty() && !camera.imagePath.empty() &&
                     map.cameras[id - 1u].imagePath.empty())
                 {
+                    row >> std::ws;
+                    if (!row.eof() && row.peek() != '#')
+                    {
+                        Point marker{};
+                        if (!(row >> marker.x >> marker.y) ||
+                            !std::isfinite(marker.x) || !std::isfinite(marker.y))
+                        {
+                            std::cerr << "Invalid camera marker in " << path
+                                      << " at line " << lineNumber << '\n';
+                            return {};
+                        }
+                        camera.marker = marker;
+                    }
                     map.cameras[id - 1u] = camera;
                     continue;
                 }
@@ -52,6 +66,33 @@ BuildingMap BuildingMap::load(const std::filesystem::path& path)
             {
                 map.walls.push_back(wall);
                 continue;
+            }
+        }
+        else if (kind == "office")
+        {
+            Office office{};
+            if ((row >> office.x1 >> office.y1 >> office.x2 >> office.y2) &&
+                !map.office && std::isfinite(office.x1) && std::isfinite(office.y1) &&
+                std::isfinite(office.x2) && std::isfinite(office.y2) &&
+                office.x1 < office.x2 && office.y1 < office.y2)
+            {
+                map.office = office;
+                continue;
+            }
+        }
+        else if (kind == "point")
+        {
+            std::string name;
+            Point position{};
+            if ((row >> name >> position.x >> position.y) &&
+                std::isfinite(position.x) && std::isfinite(position.y))
+            {
+                row >> std::ws;
+                if ((row.eof() || row.peek() == '#') &&
+                    map.navigationPoints.emplace(name, position).second)
+                {
+                    continue;
+                }
             }
         }
         else if (kind == "link")

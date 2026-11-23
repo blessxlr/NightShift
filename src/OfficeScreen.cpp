@@ -196,6 +196,14 @@ void OfficeScreen::handleEvent(const sf::Event& event, const sf::RenderTarget& t
 				{
 					cameraMonitor_.selectCamera(6);
 				}
+				else if (key->scancode == sf::Keyboard::Scancode::Num7)
+				{
+					cameraMonitor_.selectCamera(7u);
+				}
+				else if (key->scancode == sf::Keyboard::Scancode::Num8)
+				{
+					cameraMonitor_.selectCamera(8u);
+				}
 
 				return;
 			}
@@ -346,6 +354,9 @@ void OfficeScreen::update(sf::Time elapsed)
 	}
 
 	cameraMonitor_.update(elapsed);
+	
+	fedor_.update(elapsed.asSeconds());
+	cameraMonitor_.setFedorPosition(fedor_.position());
 
 	const bool leftRequested = leftLightKeyHeld_ || leftLightMouseHeld_;
 
@@ -474,7 +485,7 @@ void OfficeScreen::render(sf::RenderTarget& target) const
 
     target.setView(previousView);
     
-    cameraMonitor_.render(target);
+    cameraMonitor_.render(target, fedor_.position());
     if (power_.hasPower() && !cameraMonitor_.tabletInMotion())
     tabletHandle_.render(target, tabletHudView, cameraMonitor_.tabletBarIsOpen());
     
@@ -513,6 +524,10 @@ void OfficeScreen::startNight(unsigned night)
 	
 	power_.reset();
 	cameraMonitor_.reset();
+	
+	fedor_.reset(cameraMonitor_.buildingMap());
+	cameraMonitor_.setFedorPosition(fedor_.position());
+	
 	lighting_.setBlackout(false);
 	monitor_.update(sf::Time{});
 	refreshPowerHud();

@@ -1,15 +1,58 @@
 #include "CameraMonitor.hpp"
 #include "SwitchSound.hpp"
-#include "CameraFeed.hpp"
 
 #include <SFML/Graphics/RenderStates.hpp>
 #include <SFML/Graphics/RenderTarget.hpp>
+#include <SFML/Graphics/Vertex.hpp>
 #include <SFML/System/String.hpp>
 #include <SFML/Graphics/View.hpp>
+#include <SFML/Graphics/Image.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
+
+namespace
+{
+bool loadActorTexture(sf::Texture& texture)
+{
+    sf::Image image;
+    if (!image.loadFromFile("assets/images/fedor-camera.png"))
+        return false;
+
+    const auto size = image.getSize();
+    unsigned left = size.x;
+    unsigned top = size.y;
+    unsigned right = 0;
+    unsigned bottom = 0;
+
+    for (unsigned y = 0; y < size.y; ++y)
+    {
+        for (unsigned x = 0; x < size.x; ++x)
+        {
+            if (image.getPixel({x, y}).a < 32)
+                continue;
+
+            left = std::min(left, x);
+            right = std::max(right, x);
+            top = std::min(top, y);
+            bottom = std::max(bottom, y);
+        }
+    }
+
+    if (left > right || top > bottom)
+        return false;
+
+    const sf::IntRect bounds{
+        {static_cast<int>(left), static_cast<int>(top)},
+        {static_cast<int>(right - left + 1), static_cast<int>(bottom - top + 1)}
+    };
+
+    return texture.loadFromImage(image, false, bounds);
+}
+}
 
 CameraMonitor::CameraMonitor(const sf::Font& font, SwitchSound& switchSound)
     : switchSound_(switchSound),
@@ -37,6 +80,20 @@ CameraMonitor::CameraMonitor(const sf::Font& font, SwitchSound& switchSound)
     
     map_ = BuildingMap::load("assets/maps/building.txt");
     buildMapLayout();
+    
+    actorReady_ = sf::Shader::isAvailable() &&
+    loadActorTexture(fedorTexture_) &&
+    actorShader_.loadFromFile(
+        std::filesystem::path{"assets/shaders/camera-actor.frag"},
+        sf::Shader::Type::Fragment
+    );
+
+	if (actorReady_)
+	{
+		fedorTexture_.setSmooth(true);
+		actorShader_.setUniform("cameraFrame", sf::Shader::CurrentTexture);
+		actorShader_.setUniform("actorImage", fedorTexture_);
+	}
 
 	for (unsigned i = 0; i < BuildingMap::maxCameras; ++i)
 	{
@@ -44,7 +101,9 @@ CameraMonitor::CameraMonitor(const sf::Font& font, SwitchSound& switchSound)
 		if (!path.empty())
 		{
 			auto& feed = feeds_[i];
-			feed.loaded = loadCameraFeed(feed.texture, map_, map_.cameras[i]);
+			feed.loaded = loadCameraFeed(feed.texture, map_, map_.cameras[i],
+                             &feed.projection,
+                             actorReady_ ? &feed.depth : nullptr);
 			if (feed.loaded)
 			{
 				feed.texture.setSmooth(true);
@@ -81,11 +140,19 @@ void CameraMonitor::buildMapLayout()
         includePoint(wall.x2, wall.y2);
     }
 
+    if (map_.office)
+    {
+        const auto& office = *map_.office;
+        includePoint(office.x1, office.y1);
+        includePoint(office.x2, office.y2);
+    }
+
     for (const auto& camera : map_.cameras)
     {
         if (!camera.imagePath.empty())
         {
-            includePoint(camera.x, camera.y);
+            const auto marker = camera.marker.value_or(BuildingMap::Point{camera.x, camera.y});
+            includePoint(marker.x, marker.y);
         }
     }
 
@@ -107,8 +174,10 @@ sf::Vector2f CameraMonitor::mapToHud(float x, float y) const
 sf::FloatRect CameraMonitor::cameraButton(unsigned index) const
 {
     const auto& camera = map_.cameras[index];
-    const sf::Vector2f center = mapToHud(camera.x, camera.y);
-    return {center - sf::Vector2f{16.f, 12.f}, {32.f, 24.f}};
+    const auto marker = camera.marker.value_or(BuildingMap::Point{camera.x, camera.y});
+    const auto center = mapToHud(marker.x, marker.y);
+    constexpr sf::Vector2f size{18.f, 18.f};
+    return {center - size / 2.f, size};
 }
 
 void CameraMonitor::handleClick(sf::Vector2f point)
@@ -146,6 +215,24 @@ void CameraMonitor::renderMap(sf::RenderTarget& target) const
     status.setPosition({1388.f, 638.f});
     target.draw(status);
 
+    if (map_.office)
+    {
+        const auto& office = *map_.office;
+        const auto topLeft = mapToHud(office.x1, office.y1);
+        const auto size = mapToHud(office.x2, office.y2) - topLeft;
+        sf::RectangleShape room(size);
+        room.setPosition(topLeft);
+        room.setFillColor(sf::Color(80, 125, 126, 75));
+        target.draw(room);
+
+        sf::Text label(channelLabel_.getFont(), L"ОФИС", 18u);
+        label.setFillColor(sf::Color(205, 231, 229));
+        const auto bounds = label.getLocalBounds();
+        label.setOrigin(bounds.position + bounds.size / 2.f);
+        label.setPosition(topLeft + size / 2.f);
+        target.draw(label);
+    }
+
     sf::VertexArray walls(sf::PrimitiveType::Lines);
     const sf::Color wallColor(154, 178, 181);
 
@@ -176,14 +263,14 @@ void CameraMonitor::renderMap(sf::RenderTarget& target) const
 
         sf::Text number = channelLabel_;
         number.setString(std::to_string(i + 1u));
-        number.setCharacterSize(17u);
+        number.setCharacterSize(15u);
 
         const auto textBounds = number.getLocalBounds();
         number.setOrigin(textBounds.position + textBounds.size / 2.f);
         number.setPosition(bounds.position + bounds.size / 2.f);
         number.setFillColor(selected ? sf::Color(10, 28, 31) : sf::Color::White);
         target.draw(number);
-    }
+    }    
 }
 
 void CameraMonitor::applySelectedFeed()
@@ -197,7 +284,7 @@ void CameraMonitor::applySelectedFeed()
 
     channelLabel_.setString(sf::String::fromUtf8(caption.begin(), caption.end()));
 
-    if (!feed.loaded)
+    if (!feed.loaded || feed.projection.focal > 0.f)
     {
         screen_.setTexture(nullptr);
         screen_.setFillColor(sf::Color(13, 21, 25));
@@ -219,6 +306,47 @@ void CameraMonitor::applySelectedFeed()
         {cropWidth, cropHeight}
     });
     screen_.setFillColor(sf::Color::White);
+}
+
+void CameraMonitor::renderSelectedFeed(sf::RenderTarget& target) const
+{
+    const auto& feed = feeds_[selectedFeed_];
+    const auto& projection = feed.projection;
+    if (!feed.loaded || projection.focal <= 0.f)
+    {
+        target.draw(screen_);
+        return;
+    }
+
+    constexpr float tau = 6.28318530718f;
+    const float yaw = std::sin(sweepPhase_ * tau) *
+        static_cast<float>(CameraPanProjection::sweepDegrees) * tau / 360.f;
+    const float cosine = std::cos(yaw);
+    const float sine = std::sin(yaw);
+    const float sourceCenter = static_cast<float>(feed.texture.getSize().x) / 2.f;
+    const auto origin = screen_.getPosition();
+    const auto size = screen_.getSize();
+
+    constexpr std::size_t columns = 64;
+    std::array<sf::Vertex, (columns + 1) * 2> strip;
+    for (std::size_t i = 0; i <= columns; ++i)
+    {
+        const float portion = static_cast<float>(i) / columns;
+        const float ray = (portion - 0.5f) * projection.frameWidth / projection.focal;
+        const float depth = cosine - ray * sine;
+        const float u = sourceCenter + projection.focal * (sine + ray * cosine) / depth;
+        const float top = projection.sourceHorizon - projection.frameHorizon / depth;
+        const float bottom = top + projection.frameHeight / depth;
+        const float x = origin.x + portion * size.x;
+        strip[2 * i] = {{x, origin.y}, sf::Color::White, {u, top}};
+        strip[2 * i + 1] = {{x, origin.y + size.y}, sf::Color::White, {u, bottom}};
+    }
+
+    sf::RenderStates states;
+    states.texture = &feed.texture;
+    const auto& fedor = fedorPosition_;
+    if (fedor && actorReady_ && feed.depth.getSize() == feed.texture.getSize())
+    target.draw(strip.data(), strip.size(), sf::PrimitiveType::TriangleStrip, states);
 }
 
 void CameraMonitor::playSignalTransition()
@@ -262,6 +390,7 @@ void CameraMonitor::reset()
     wantsOpen_ = false;
     switchCooldownLeft_ = 0.f;
     progress_ = 0.f;
+    sweepPhase_ = 0.f;
     interferenceLeft_ = 0.f;
     selectedFeed_ = 0u;
     applySelectedFeed();
@@ -270,8 +399,10 @@ void CameraMonitor::reset()
 void CameraMonitor::update(sf::Time elapsed)
 {
     constexpr float travelSeconds = 0.26f;
+    constexpr float sweepSeconds = 12.f;
 
     const float seconds = elapsed.asSeconds();
+    sweepPhase_ = std::fmod(sweepPhase_ + seconds / sweepSeconds, 1.f);
     switchCooldownLeft_ = std::max(0.f, switchCooldownLeft_ - seconds);
     const float previousProgress = progress_;
     const float step = seconds / travelSeconds;
@@ -300,7 +431,8 @@ bool CameraMonitor::isRaised() const
     return wantsOpen_ || progress_ > 0.f;
 }
 
-void CameraMonitor::render(sf::RenderTarget& target) const
+void CameraMonitor::render(sf::RenderTarget& target,
+                           std::optional<BuildingMap::Point> fedor) const
 {
     if (progress_ <= 0.f)
     {
@@ -315,7 +447,7 @@ void CameraMonitor::render(sf::RenderTarget& target) const
 
     if (wantsOpen_ && progress_ >= 1.f)
 	{
-		target.draw(screen_);
+		renderSelectedFeed(target);
 		
 		if (feeds_[selectedFeed_].loaded)
 		{

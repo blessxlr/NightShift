@@ -1,6 +1,6 @@
 #pragma once
 
-#include "BuildingMap.hpp"
+#include "CameraFeed.hpp"
 #include "TvEffect.hpp"
 
 #include <SFML/Graphics/RectangleShape.hpp>
@@ -8,6 +8,9 @@
 #include <SFML/Graphics/Texture.hpp>
 #include <SFML/System/Time.hpp>
 #include <SFML/Graphics/Rect.hpp>
+#include <SFML/Graphics/Shader.hpp>
+
+#include <optional>
 
 namespace sf
 {
@@ -26,9 +29,18 @@ public:
     void lower();
     void reset();
     void update(sf::Time elapsed);
-    void render(sf::RenderTarget& target) const;
-
+    void render(sf::RenderTarget& target,
+            std::optional<BuildingMap::Point> fedor = std::nullopt) const;
+	const BuildingMap& buildingMap() const
+	{
+		return map_;
+	}
     [[nodiscard]] bool isRaised() const;
+    
+    void setFedorPosition(std::optional<BuildingMap::Point> position)
+	{
+		fedorPosition_ = position;
+	}
     
     void selectCamera(unsigned number);
     
@@ -52,16 +64,26 @@ private:
 	struct Feed
 	{
 		sf::Texture texture;
+		sf::Texture depth;
+		CameraPanProjection projection;
 		bool loaded = false;
 	};
 
 	BuildingMap map_;
 	std::array<Feed, BuildingMap::maxCameras> feeds_{};
 	unsigned selectedFeed_ = 0u;
+	float sweepPhase_ = 0.f;
 
 	void applySelectedFeed();
+	void renderSelectedFeed(sf::RenderTarget& target) const;
 	void playSignalTransition();
 	float interferenceLeft_ = 0.f;
+
+	sf::Texture fedorTexture_;
+	std::optional<BuildingMap::Point> fedorPosition_;
+	
+	mutable sf::Shader actorShader_;
+	bool actorReady_ = false;
 
     sf::RectangleShape panel_;
     sf::RectangleShape screen_;

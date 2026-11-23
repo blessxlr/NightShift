@@ -9,6 +9,13 @@
 #include <cmath>
 #include <cstdint>
 
+namespace
+{
+constexpr sf::Vector2f fanContact{962.f, 449.8f};
+constexpr float fanScale = 0.202f;
+constexpr sf::Vector2f pivotToContact = sf::Vector2f{30.f, 461.f} * fanScale;
+}
+
 OfficeFan::OfficeFan(sf::Vector2u panoramaSize)
     : texture_("assets/images/office-fan-atlas.png"),
       body_(texture_),
@@ -30,8 +37,8 @@ OfficeFan::OfficeFan(sf::Vector2u panoramaSize)
     const float officeScale =
         1080.f / static_cast<float>(panoramaSize.y);
 
-    position_ = sf::Vector2f{956.f, 348.676f} * officeScale;
-    scale_ = 0.202f * officeScale;
+    position_ = (fanContact - pivotToContact) * officeScale;
+    scale_ = fanScale * officeScale;
 
     buildShadow(officeScale);
     reset();
@@ -42,14 +49,13 @@ void OfficeFan::buildShadow(float officeScale)
     constexpr std::size_t segments = 48u;
     constexpr float pi = 3.14159265358979323846f;
 
-    const sf::Vector2f center =
-        sf::Vector2f{964.f, 443.f} * officeScale;
+    const sf::Vector2f center = (fanContact + sf::Vector2f{0.f, 1.f}) * officeScale;
 
     const auto edge = [&](float angle)
     {
         return center + sf::Vector2f{
             std::cos(angle) * 45.f * officeScale,
-            std::sin(angle) * 5.f * officeScale
+            std::sin(angle) * 4.5f * officeScale
         };
     };
 
@@ -62,7 +68,7 @@ void OfficeFan::buildShadow(float officeScale)
             static_cast<float>(i + 1u) / segments * 2.f * pi;
 
         shadow_[i * 3u] = {
-            center, sf::Color(0, 0, 0, 90)
+            center, sf::Color(0, 0, 0, 150)
         };
 
         shadow_[i * 3u + 1u] = {

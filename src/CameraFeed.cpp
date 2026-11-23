@@ -16,7 +16,8 @@
 namespace
 {
 using Vec = sf::Vector2<double>;
-constexpr unsigned width = 888, height = 468;
+constexpr unsigned frameWidth = 888, frameHeight = 468;
+constexpr double stageHeight = 3.0, stageDepth = 8.0;
 constexpr double roomHeight = 32.0;
 constexpr double pi = 3.141592653589793;
 constexpr double inf = std::numeric_limits<double>::infinity();
@@ -480,14 +481,21 @@ void shadeSupport(const Decor& decor,const PartAtlas* art,Vec p,double z,
 }
 
 sf::Image renderRoom(const BuildingMap& map,const BuildingMap::Camera& camera,
-                     double heading,double fov,double eyeHeight,double horizonRatio,const sf::Image& atlas)
+                     double heading,double eyeHeight,const sf::Image& atlas,
+                     unsigned width,unsigned height,double focal,double horizon,
+                     CameraPanProjection* pan,sf::Image* depthImage)
 {
     const Decor decor=loadDecor(map);
     const Stage& stage=decor.stage;
+    if (pan && stage.wall>=0)
+    {
+        pan->stageCenter={static_cast<float>(stage.centre.x),static_cast<float>(stage.centre.y)};
+        pan->stageTangent={static_cast<float>(stage.tangent.x),static_cast<float>(stage.tangent.y)};
+        pan->stageHalfWidth=static_cast<float>(stage.halfWidth);
+    }
     const Vec origin{camera.x,camera.y};
     const double angle=std::remainder(heading,360.0)*pi/180.0;
     const Vec forward{std::cos(angle),std::sin(angle)},right{-forward.y,forward.x};
-    const double focal=width/(2*std::tan(fov*pi/360.0)), horizon=height*horizonRatio;
     struct ProjectedPart
     {
         double depth,left,top,width,height,spill;
@@ -536,7 +544,7 @@ sf::Image renderRoom(const BuildingMap& map,const BuildingMap::Camera& camera,
         const bool platform=stage.wall>=0 &&
             clipAxis(dot(local,stage.tangent),dot(ray,stage.tangent),
                      -stage.halfWidth,stage.halfWidth,entry,exit) &&
-            clipAxis(dot(local,stage.normal),dot(ray,stage.normal),0,8,entry,exit);
+            clipAxis(dot(local,stage.normal),dot(ray,stage.normal),0,stageDepth,entry,exit);
 
         struct FixtureSpan { const Decor::Fixture* fixture; double near,far; };
         std::vector<FixtureSpan> spans;
@@ -557,16 +565,16 @@ sf::Image renderRoom(const BuildingMap& map,const BuildingMap::Camera& camera,
             if (!std::isfinite(depth)) continue;
             sf::Color texel;
             double gain=1,spill=0,emission=0;
-            const double deck=slope<0 ? (3.0-eyeHeight)/slope : inf;
+            const double deck=slope<0 ? (stageHeight-eyeHeight)/slope : inf;
             const bool seesDeck=platform && deck>=entry && deck<=exit && deck<depth;
             const double entryZ=eyeHeight+slope*entry;
-            if (seesDeck || (platform && entry>0 && entry<depth && entryZ>=0 && entryZ<=3))
+            if (seesDeck || (platform && entry>0 && entry<depth && entryZ>=0 && entryZ<=stageHeight))
             {
                 depth=seesDeck ? deck : entry;
                 const Vec p=origin+ray*depth;
                 const double along=dot(p-stage.centre,stage.tangent);
                 const double across=dot(p-stage.centre,stage.normal);
-                const double grainV=seesDeck ? fraction(across/8) : 1-entryZ/3;
+                const double grainV=seesDeck ? fraction(across/stageDepth) : 1-entryZ/stageHeight;
                 texel=sample(atlas,Surface::Curtain,along/32,0.86+0.13*grainV);
                 gain=(seesDeck ? 0.86 : 0.59)*0.46;
                 spill=arcadeSpill(decor,p);
@@ -681,14 +689,23 @@ sf::Image renderRoom(const BuildingMap& map,const BuildingMap::Camera& camera,
             const double beam=1/(1+5.8*screenX*screenX+3.6*screenY*screenY);
             const double infrared=0.24+2.45*beam*beam/(1+depth*depth/2900);
             frame.setPixel({x,y},cctvColor(texel,gain*infrared,emission+spill));
+            if (depthImage)
+            {
+                const auto encoded=static_cast<std::uint16_t>(std::clamp(depth*16.0,0.0,65535.0));
+                depthImage->setPixel({x,y},{static_cast<std::uint8_t>(encoded>>8),
+                                            static_cast<std::uint8_t>(encoded&255),0});
+            }
         }
     }
     return frame;
 }
 }
 
-bool loadCameraFeed(sf::Texture& texture,const BuildingMap& map,const BuildingMap::Camera& camera)
+bool loadCameraFeed(sf::Texture& texture, const BuildingMap& map,
+                    const BuildingMap::Camera& camera,
+                    CameraPanProjection* pan, sf::Texture* depthTexture)
 {
+    if (pan) *pan = {};
     std::istringstream source(camera.imagePath);
     std::string kind,extra;
     source>>kind;
@@ -708,5 +725,67 @@ bool loadCameraFeed(sf::Texture& texture,const BuildingMap& map,const BuildingMa
     static sf::Image atlas;
     static const bool loaded=atlas.loadFromFile("assets/images/cctv-materials.png");
     if (!loaded || atlas.getSize().x<8 || atlas.getSize().y<8) return false;
-    return texture.loadFromImage(renderRoom(map,camera,heading,fov,eyeHeight,horizonRatio,atlas));
+    const double halfFov=fov*pi/360.0;
+    double focal=frameWidth/(2*std::tan(halfFov));
+    double horizon=frameHeight*horizonRatio;
+    unsigned width=frameWidth, height=frameHeight;
+    if (pan && fov+2*CameraPanProjection::sweepDegrees<179.0)
+    {
+        const double sweep=CameraPanProjection::sweepDegrees*pi/180.0;
+        const double wide=2*focal*std::tan(halfFov+sweep);
+        const double stretch=1.0/(std::cos(sweep)-std::tan(halfFov)*std::sin(sweep));
+        const double tall=frameHeight*stretch;
+        const double density=std::min({1.0,1916.0/wide,1076.0/tall});
+        width=static_cast<unsigned>(std::ceil(wide*density))+4;
+        height=static_cast<unsigned>(std::ceil(tall*density))+4;
+        focal*=density;
+        pan->focal=static_cast<float>(focal);
+        pan->frameWidth=static_cast<float>(frameWidth*density);
+        pan->frameHeight=static_cast<float>(frameHeight*density);
+        pan->frameHorizon=static_cast<float>(horizon*density);
+        horizon=horizon*stretch*density+2;
+        pan->sourceHorizon=static_cast<float>(horizon);
+        pan->heading=static_cast<float>(std::remainder(heading,360.0));
+        pan->eyeHeight=static_cast<float>(eyeHeight);
+    }
+    const bool storeDepth=depthTexture && pan && pan->focal>0.f;
+    sf::Image depths;
+    if (storeDepth) depths.resize({width,height},{255,255,0});
+    const bool ready=texture.loadFromImage(renderRoom(map,camera,heading,eyeHeight,atlas,width,height,
+                                                       focal,horizon,pan,storeDepth ? &depths : nullptr));
+    if (ready && storeDepth && !depthTexture->loadFromImage(depths))
+        *depthTexture=sf::Texture{};
+    return ready;
+}
+
+std::optional<CameraActorPlacement> projectCameraActor(
+    const BuildingMap::Camera& camera,const CameraPanProjection& pan,
+    sf::Vector2u textureSize,BuildingMap::Point actor,float aspect)
+{
+    if (pan.focal<=0.f || textureSize.x==0 || textureSize.y==0) return std::nullopt;
+    const double angle=pan.heading*pi/180.0;
+    const Vec forward{std::cos(angle),std::sin(angle)},right{-forward.y,forward.x};
+    const Vec offset{actor.x-camera.x,actor.y-camera.y};
+    const double depth=dot(offset,forward);
+    if (depth<=0.5) return std::nullopt;
+
+    const Vec stageOffset{actor.x-pan.stageCenter.x,actor.y-pan.stageCenter.y};
+    const Vec tangent{pan.stageTangent.x,pan.stageTangent.y};
+    const double across=dot(stageOffset,{-tangent.y,tangent.x});
+    const double floorHeight=std::abs(dot(stageOffset,tangent))<pan.stageHalfWidth &&
+        across>=0 && across<=stageDepth ? stageHeight : 0.0;
+    constexpr double actorHeight=21.0;
+    const double h=pan.focal*actorHeight/depth;
+    const double w=h*aspect;
+    const double left=textureSize.x/2.0+pan.focal*dot(offset,right)/depth-w/2;
+    const double bottom=pan.sourceHorizon+pan.focal*(pan.eyeHeight-floorHeight)/depth;
+    const double top=bottom-h;
+    if (left+w<=0 || left>=textureSize.x || bottom<=0 || top>=textureSize.y)
+        return std::nullopt;
+
+    return CameraActorPlacement{
+        {{static_cast<float>(left/textureSize.x),static_cast<float>(top/textureSize.y)},
+         {static_cast<float>(w/textureSize.x),static_cast<float>(h/textureSize.y)}},
+        static_cast<float>(depth)
+    };
 }

@@ -16,6 +16,7 @@
 #include "NightTimer.hpp"
 #include "PowerSystem.hpp"
 #include "CameraMonitor.hpp"
+#include "FedorMovement.hpp"
 #include "SwitchSound.hpp"
 #include "TabletHandle.hpp"
 
@@ -70,6 +71,7 @@ private:
     OfficeMonitor monitor_;
     OfficeCamera camera_;
     CameraMonitor cameraMonitor_;
+    FedorMovement fedor_;
     sf::Text nightLabel_;
     sf::Text clockLabel_;
     sf::Text powerLabel_;
